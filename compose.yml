@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: docker.io/library/wasuh-api:${APP_TAG:-dev}
+    container_name: wasuh-api
+    environment:
+      - DB_SOURCE=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable
+      - SERVER_PORT=${SERVER_PORT}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY}
+      - ACCESS_TOKEN_DURATION=${ACCESS_TOKEN_DURATION}
+      - REFRESH_TOKEN_DURATION=${REFRESH_TOKEN_DURATION}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+
+  db:
+    image: docker.io/postgres:15-alpine
+    container_name: postgres-db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - pgdata:/var/lib/postgresql/data:Z
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    image: docker.io/migrate/migrate:v4.17.1
+    container_name: db-migrate
+    volumes:
+      - ./pkg/db/migrations:/migrations:Z
+    environment:
+      - DB_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    entrypoint: ["migrate", "-path", "/migrations", "-database", "postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"]
+    command: ["up"]
+
+volumes:
+  pgdata:
+
+networks:
+  app-network:

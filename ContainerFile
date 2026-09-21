@@ -1,0 +1,44 @@
+# ===== Base stage: shared dependencies =====
+FROM golang:1.26.4-alpine AS base
+
+WORKDIR /app
+
+RUN apk add --no-cache git
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+
+# ===== Dev stage: pakai air untuk hot reload =====
+FROM base AS dev
+
+RUN go install github.com/air-verse/air@latest
+RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+RUN go install golang.org/x/tools/cmd/goimports@latest
+
+EXPOSE 8080
+
+CMD ["air", "-c", ".air.toml"]
+
+
+# ===== Build stage: compile binary untuk prod =====
+FROM base AS build
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/main ./cmd
+
+
+# ===== Prod stage: image minimal, tanpa Go toolchain sama sekali =====
+FROM alpine:3.20 AS prod
+
+WORKDIR /app
+
+RUN apk add --no-cache ca-certificates
+
+COPY --from=build /app/main .
+COPY --from=build /app/pkg/db/migrations ./pkg/db/migrations
+
+EXPOSE 8080
+
+CMD ["./main"]

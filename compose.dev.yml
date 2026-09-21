@@ -1,0 +1,15 @@
+services:
+  api:
+    build:
+      target: dev
+    ports:
+      - "${API_PORT}:8080"
+    volumes:
+      - .:/app:Z
+    depends_on:
+      - db
+      - migrate
+
+  db:
+    ports:
+      - "${DB_PORT}:5432"

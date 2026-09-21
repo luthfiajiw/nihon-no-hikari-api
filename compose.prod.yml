@@ -1,0 +1,13 @@
+services:
+  api:
+    build:
+      target: prod
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  db:
+    restart: unless-stopped
+
+  migrate:
+    restart: "no"

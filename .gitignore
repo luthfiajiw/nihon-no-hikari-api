@@ -1,0 +1,37 @@
+# .gitignore
+
+# File hasil kompilasi dan biner
+# Abaikan file eksekusi utama (bisa berbeda nama di OS lain)
+/main
+/main.exe
+
+# Folder dan log yang dibuat oleh Air Live Reload
+/tmp/
+air_errors.log
+
+# Dependensi Go
+# Folder vendor tidak perlu dimasukkan jika menggunakan Go Modules.
+# go.mod dan go.sum sudah cukup sebagai sumber kebenaran.
+/vendor/
+
+# File Environment
+# SANGAT PENTING! Jangan pernah memasukkan file .env ke dalam Git.
+# File ini berisi kredensial database, secret key, dll.
+.env
+.env.*
+!.env.example
+
+# File log umum
+*.log
+*.log.*
+
+# File konfigurasi dari IDE dan editor
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln.docstates
+
+# File sistem operasi
+.DS_Store
+Thumbs.db

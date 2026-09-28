@@ -10,12 +10,12 @@ import (
 
 type JWTPayload struct {
 	ID     uuid.UUID `json:"id"`
-	UserID int32     `json:"user_id"`
+	UserID uuid.UUID `json:"user_id"`
 	Email  string    `json:"email"`
 	jwt.RegisteredClaims
 }
 
-func CreateToken(tokenID uuid.UUID, userID int32, email string, duration time.Duration, secretKey string) (string, *JWTPayload, error) {
+func CreateToken(tokenID uuid.UUID, userID uuid.UUID, email string, duration time.Duration, secretKey string) (string, *JWTPayload, error) {
 	payload := &JWTPayload{
 		ID:     tokenID,
 		UserID: userID,

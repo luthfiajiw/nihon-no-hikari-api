@@ -17,4 +17,6 @@ var (
 	ErrTokenMismatched      = errors.New("mismatched refresh token")
 	ErrInvalidRefreshToken  = errors.New("refresh token tidak valid")
 	ErrUnsupportedGrantType = errors.New("grant_type tidak didukung")
+	ErrCourseNotFound       = errors.New("kursus tidak ditemukan")
+	ErrLessonNotFound       = errors.New("pelajaran tidak ditemukan")
 )

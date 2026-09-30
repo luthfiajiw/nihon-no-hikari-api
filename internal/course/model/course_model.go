@@ -1,4 +1,4 @@
-package models
+package model
 
 import (
 	"github.com/google/uuid"
@@ -21,7 +21,7 @@ type Course struct {
 	Level        CourseLevel `json:"level"`
 }
 
-type ListCoursesRes struct {
+type ListCourseResponse struct {
 	Success bool     `json:"success"`
 	Message string   `json:"message"`
 	Data    []Course `json:"data"`

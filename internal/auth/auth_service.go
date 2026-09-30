@@ -41,7 +41,7 @@ func (s *service) Logout(ctx context.Context, req LogoutRequest) error {
 func (s *service) RefreshAccessToken(ctx context.Context, req TokenRequest) (*RefreshTokenResponse, error) {
 	refreshPayload, err := utils.VerifyToken(req.Token, s.cfg.JWTRefreshSecretKey)
 	if err != nil {
-		return nil, fmt.Errorf("invalid refresh token: %w", err)
+		return nil, fmt.Errorf("%w: %v", utils.ErrInvalidRefreshToken, err)
 	}
 
 	session, err := s.authRepo.GetSession(ctx, req.Token)

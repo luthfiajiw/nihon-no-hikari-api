@@ -69,7 +69,7 @@ func (db *dbRepository) CreateSession(ctx context.Context, session UserSession) 
 // GetSession implements [Repository].
 func (db *dbRepository) GetSession(ctx context.Context, refreshToken string) (UserSession, error) {
 	sql := `
-		SELECT id, id_users, refresh_token, user_agent, client_ip, expires_at
+		SELECT id, user_id, refresh_token, user_agent, client_ip, expires_at
 		FROM user_sessions
 		WHERE refresh_token = $1 AND is_blocked = false;
 	`

@@ -4,8 +4,10 @@ import (
 	"log"
 	"nihon-no-hikari-api/config"
 	"nihon-no-hikari-api/internal/auth"
+	"nihon-no-hikari-api/internal/course"
 	"nihon-no-hikari-api/internal/user"
 	"nihon-no-hikari-api/pkg/db"
+	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/go-playground/validator/v10"
@@ -36,18 +38,25 @@ func main() {
 	// REPOSITORIES
 	userRepo := user.NewRepository(pool)
 	authRepo := auth.NewRepository(pool)
+	courseRepo := course.NewRepository(pool)
 
 	// SERVICES
 	authService := auth.NewService(tx, cfg, authRepo, userRepo)
+	courseService := course.NewService(courseRepo)
+
+	// MIDDLEWARE
+	authMiddleware := middleware.New(cfg, pool)
 
 	// HANDLERS
 	authHandler := auth.NewHandler(authService, bodyValidator)
+	courseHandler := course.NewHandler(courseService, authMiddleware)
 
 	// FIBER APP
 	app := fiber.New()
 	app.Use(logger.New())
 
 	authHandler.RegisterRoutes(app)
+	courseHandler.RegisterRoutes(app)
 
 	if err := app.Listen(cfg.Port); err != nil {
 		log.Fatalf("server failed to start: %v", err)

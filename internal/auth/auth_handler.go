@@ -23,6 +23,8 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	authGroup := app.Group("/api/v1/auth")
 	authGroup.Post("/register", h.register)
 	authGroup.Post("/signin", h.signIn)
+	authGroup.Post("/token", h.token)
+	authGroup.Post("/signout", h.signout)
 }
 
 func (h *Handler) register(c fiber.Ctx) error {
@@ -102,4 +104,77 @@ func (h *Handler) signIn(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *Handler) token(c fiber.Ctx) error {
+	var req TokenRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   err.Error(),
+		})
+	}
+
+	if validationErr := h.validator.Validate(req); validationErr != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(validationErr)
+	}
+
+	if req.GrantType != "refresh" {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   utils.ErrUnsupportedGrantType.Error(),
+		})
+	}
+
+	res, err := h.service.RefreshAccessToken(c.Context(), req)
+	if err != nil {
+		if errors.Is(err, utils.ErrInvalidRefreshToken) ||
+			errors.Is(err, utils.ErrSessionBlocked) ||
+			errors.Is(err, utils.ErrSessionExpired) {
+			return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{
+				Success: false,
+				Error:   err.Error(),
+			})
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *Handler) signout(c fiber.Ctx) error {
+	var req LogoutRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   err.Error(),
+		})
+	}
+
+	if validationErr := h.validator.Validate(req); validationErr != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(validationErr)
+	}
+
+	if err := h.service.Logout(c.Context(), req); err != nil {
+		if errors.Is(err, utils.ErrSessionNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{
+				Success: false,
+				Error:   err.Error(),
+			})
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(utils.SuccessRes{
+		Success: true,
+		Message: "berhasil keluar",
+	})
 }

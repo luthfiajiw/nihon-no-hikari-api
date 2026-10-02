@@ -2,16 +2,6 @@ package model
 
 import "github.com/google/uuid"
 
-type Module struct {
-	ID               uuid.UUID `json:"id"`
-	Slug             string    `json:"slug"`
-	Title            string    `json:"title"`
-	Description      *string   `json:"description"`
-	IsMandatory      bool      `json:"is_mandatory"`
-	IsEntry          bool      `json:"is_entry"`
-	EstimatedMinutes int32     `json:"estimated_minutes"`
-}
-
 type Lesson struct {
 	ID    uuid.UUID `json:"id"`
 	Slug  string    `json:"slug"`

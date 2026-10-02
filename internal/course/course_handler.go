@@ -2,6 +2,7 @@ package course
 
 import (
 	"errors"
+	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/utils"
 
@@ -21,8 +22,80 @@ func NewHandler(service Service, middleware middleware.Middleware) *Handler {
 func (h *Handler) RegisterRoutes(app *fiber.App) {
 	courseGroup := app.Group("/api/v1/courses", h.middleware.AuthMiddleware())
 	courseGroup.Get("", h.list)
-	courseGroup.Get("/:courseId", h.listLessons)
+	courseGroup.Get("/:courseId", h.getDetail)
+	courseGroup.Get("/:courseId/modules", h.listLessons)
+	courseGroup.Put("/:courseId/modules/:moduleId/progress", h.upsertModuleProgress)
 	courseGroup.Get("/:courseId/lessons/:lessonId", h.getLessonDetail)
+}
+
+func (h *Handler) upsertModuleProgress(c fiber.Ctx) error {
+	courseID, err := uuid.Parse(c.Params("courseId"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "courseId tidak valid"})
+	}
+
+	moduleID, err := uuid.Parse(c.Params("moduleId"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "moduleId tidak valid"})
+	}
+
+	userID, ok := c.Locals(utils.UserIDKey).(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: "user tidak terautentikasi"})
+	}
+
+	var req model.UpsertModuleProgressRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	res, err := h.service.UpsertModuleProgress(c.Context(), courseID, moduleID, userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, utils.ErrInvalidModuleProgress):
+			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrModuleNotFound):
+			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *Handler) getDetail(c fiber.Ctx) error {
+	courseID, err := uuid.Parse(c.Params("courseId"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   "courseId tidak valid",
+		})
+	}
+
+	userID, ok := c.Locals(utils.UserIDKey).(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   "user tidak terautentikasi",
+		})
+	}
+
+	res, err := h.service.GetDetail(c.Context(), courseID, userID)
+	if err != nil {
+		if errors.Is(err, utils.ErrCourseNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{
+				Success: false,
+				Error:   err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *Handler) getLessonDetail(c fiber.Ctx) error {
@@ -68,7 +141,15 @@ func (h *Handler) listLessons(c fiber.Ctx) error {
 		})
 	}
 
-	res, err := h.service.GetLessons(c.Context(), courseID)
+	userID, ok := c.Locals(utils.UserIDKey).(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   "user tidak terautentikasi",
+		})
+	}
+
+	res, err := h.service.GetLessons(c.Context(), courseID, userID)
 	if err != nil {
 		if errors.Is(err, utils.ErrCourseNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{

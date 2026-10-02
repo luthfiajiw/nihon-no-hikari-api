@@ -13,8 +13,125 @@ import (
 
 type Repository interface {
 	List(ctx context.Context) ([]model.Course, error)
-	ListLessons(ctx context.Context, courseID uuid.UUID) ([]model.ModuleLesson, error)
+	GetCourseDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetail, error)
+	ListLessons(ctx context.Context, courseID, userID uuid.UUID) ([]model.ModuleLesson, error)
 	GetLessonDetail(ctx context.Context, courseID, lessonID uuid.UUID) (*model.LessonDetail, error)
+	UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgress, error)
+}
+
+func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgress, error) {
+	const query = `
+		INSERT INTO user_module_progress AS progress (
+			user_id, module_id, status, best_score, unlocked_at, completed_at, updated_at
+		)
+		SELECT
+			$1,
+			m.id,
+			COALESCE($4::progress_status, 'locked'::progress_status),
+			$5::smallint,
+			CASE WHEN COALESCE($4::progress_status, 'locked'::progress_status) <> 'locked' THEN now() END,
+			CASE WHEN $4::progress_status = 'completed' THEN now() END,
+			now()
+		FROM modules m
+		JOIN courses c ON c.id = m.course_id
+		WHERE m.id = $2
+			AND c.id = $3
+			AND m.is_published = true
+			AND c.is_published = true
+		ON CONFLICT (user_id, module_id) DO UPDATE SET
+			status = COALESCE($4::progress_status, progress.status),
+			best_score = COALESCE($5::smallint, progress.best_score),
+			unlocked_at = CASE
+				WHEN COALESCE($4::progress_status, progress.status) <> 'locked'
+					THEN COALESCE(progress.unlocked_at, now())
+				ELSE progress.unlocked_at
+			END,
+			completed_at = CASE
+				WHEN COALESCE($4::progress_status, progress.status) = 'completed'
+					THEN COALESCE(progress.completed_at, now())
+				WHEN $4::progress_status IS NOT NULL THEN NULL
+				ELSE progress.completed_at
+			END,
+			updated_at = now()
+		RETURNING user_id, module_id, status, best_score, unlocked_at, completed_at, updated_at
+	`
+
+	var progress model.ModuleProgress
+	err := r.pool.QueryRow(ctx, query, userID, moduleID, courseID, req.Status, req.BestScore).Scan(
+		&progress.UserID,
+		&progress.ModuleID,
+		&progress.Status,
+		&progress.BestScore,
+		&progress.UnlockedAt,
+		&progress.CompletedAt,
+		&progress.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, utils.ErrModuleNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &progress, nil
+}
+
+func (r *dbRepository) GetCourseDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetail, error) {
+	const query = `
+		SELECT
+			c.id,
+			c.slug,
+			c.title,
+			c.description,
+			c.thumbnail_url,
+			COALESCE((
+				SELECT SUM(m.estimated_minutes)::integer
+				FROM modules m
+				WHERE m.course_id = c.id
+					AND m.is_published = true
+			), 0),
+			(
+				SELECT COUNT(*)::integer
+				FROM modules m
+				JOIN lessons ls ON ls.module_id = m.id
+				WHERE m.course_id = c.id
+					AND m.is_published = true
+					AND ls.is_published = true
+			),
+			l.id,
+			l.code,
+			l.name
+		FROM courses c
+		JOIN levels l ON l.id = c.level_id
+		WHERE c.id = $1 AND c.is_published = true
+	`
+
+	var course model.CourseDetail
+	if err := r.pool.QueryRow(ctx, query, courseID).Scan(
+		&course.ID,
+		&course.Slug,
+		&course.Title,
+		&course.Description,
+		&course.ThumbnailUrl,
+		&course.TotalMinutes,
+		&course.TotalLessons,
+		&course.Level.ID,
+		&course.Level.Code,
+		&course.Level.Name,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, utils.ErrCourseNotFound
+		}
+		return nil, err
+	}
+
+	modules, err := r.listModules(ctx, courseID, userID)
+	if err != nil {
+		return nil, err
+	}
+	course.Modules = modules
+
+	return &course, nil
 }
 
 func (r *dbRepository) GetLessonDetail(ctx context.Context, courseID, lessonID uuid.UUID) (*model.LessonDetail, error) {
@@ -50,7 +167,7 @@ func (r *dbRepository) GetLessonDetail(ctx context.Context, courseID, lessonID u
 	return &lesson, nil
 }
 
-func (r *dbRepository) ListLessons(ctx context.Context, courseID uuid.UUID) ([]model.ModuleLesson, error) {
+func (r *dbRepository) ListLessons(ctx context.Context, courseID, userID uuid.UUID) ([]model.ModuleLesson, error) {
 	const courseQuery = `
 		SELECT id
 		FROM courses
@@ -64,47 +181,19 @@ func (r *dbRepository) ListLessons(ctx context.Context, courseID uuid.UUID) ([]m
 		return nil, err
 	}
 
-	const moduleQuery = `
-		SELECT
-			id,
-			slug,
-			title,
-			description,
-			is_mandatory,
-			is_entry,
-			COALESCE(estimated_minutes, 0)
-		FROM modules
-		WHERE course_id = $1 AND is_published = true
-		ORDER BY order_index ASC
-	`
-
-	moduleRows, err := r.pool.Query(ctx, moduleQuery, courseID)
+	modules, err := r.listModules(ctx, courseID, userID)
 	if err != nil {
 		return nil, err
 	}
-	defer moduleRows.Close()
 
-	items := make([]model.ModuleLesson, 0)
-	moduleIndexes := make(map[uuid.UUID]int)
-	for moduleRows.Next() {
-		var item model.ModuleLesson
-		if err := moduleRows.Scan(
-			&item.Module.ID,
-			&item.Module.Slug,
-			&item.Module.Title,
-			&item.Module.Description,
-			&item.Module.IsMandatory,
-			&item.Module.IsEntry,
-			&item.Module.EstimatedMinutes,
-		); err != nil {
-			return nil, err
-		}
-		item.Lessons = make([]model.Lesson, 0)
-		moduleIndexes[item.Module.ID] = len(items)
-		items = append(items, item)
-	}
-	if err := moduleRows.Err(); err != nil {
-		return nil, err
+	items := make([]model.ModuleLesson, 0, len(modules))
+	moduleIndexes := make(map[uuid.UUID]int, len(modules))
+	for _, module := range modules {
+		items = append(items, model.ModuleLesson{
+			Module:  module,
+			Lessons: make([]model.Lesson, 0),
+		})
+		moduleIndexes[module.ID] = len(items) - 1
 	}
 	if len(items) == 0 {
 		return items, nil
@@ -153,6 +242,66 @@ func (r *dbRepository) ListLessons(ctx context.Context, courseID uuid.UUID) ([]m
 	return items, nil
 }
 
+func (r *dbRepository) listModules(ctx context.Context, courseID, userID uuid.UUID) ([]model.Module, error) {
+	const query = `
+		SELECT
+			m.id,
+			m.slug,
+			m.title,
+			m.description,
+			m.is_mandatory,
+			m.is_entry,
+			CASE
+				WHEN EXISTS (
+					SELECT 1
+					FROM module_prerequisites mp
+					LEFT JOIN user_module_progress prerequisite_progress
+						ON prerequisite_progress.module_id = mp.required_module_id
+						AND prerequisite_progress.user_id = $2
+					WHERE mp.module_id = m.id
+						AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
+				) THEN 'locked'
+				ELSE COALESCE(module_progress.status::text, 'unlocked')
+			END,
+			COALESCE(m.estimated_minutes, 0)
+		FROM modules m
+		LEFT JOIN user_module_progress module_progress
+			ON module_progress.module_id = m.id
+			AND module_progress.user_id = $2
+		WHERE m.course_id = $1 AND m.is_published = true
+		ORDER BY m.order_index ASC
+	`
+
+	rows, err := r.pool.Query(ctx, query, courseID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	modules := make([]model.Module, 0)
+	for rows.Next() {
+		var module model.Module
+		if err := rows.Scan(
+			&module.ID,
+			&module.Slug,
+			&module.Title,
+			&module.Description,
+			&module.IsMandatory,
+			&module.IsEntry,
+			&module.Status,
+			&module.EstimatedMinutes,
+		); err != nil {
+			return nil, err
+		}
+		modules = append(modules, module)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return modules, nil
+}
+
 type dbRepository struct {
 	pool *pgxpool.Pool
 }
@@ -169,7 +318,12 @@ func (r *dbRepository) List(ctx context.Context) ([]model.Course, error) {
 			c.title,
 			c.description,
 			c.thumbnail_url,
-			COALESCE(c.hours, 0),
+			COALESCE((
+				SELECT SUM(m.estimated_minutes)::integer
+				FROM modules m
+				WHERE m.course_id = c.id
+					AND m.is_published = true
+			), 0),
 			(
 				SELECT COUNT(*)::integer
 				FROM modules m
@@ -202,7 +356,7 @@ func (r *dbRepository) List(ctx context.Context) ([]model.Course, error) {
 			&item.Title,
 			&item.Description,
 			&item.ThumbnailUrl,
-			&item.TotalHours,
+			&item.TotalMinutes,
 			&item.TotalLessons,
 			&item.Level.ID,
 			&item.Level.Code,

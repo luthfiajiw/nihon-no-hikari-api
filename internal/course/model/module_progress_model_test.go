@@ -3,8 +3,8 @@ package model
 import "testing"
 
 func TestUpsertModuleProgressRequestValidate(t *testing.T) {
-	validStatus := ModuleStatusCompleted
-	invalidStatus := ModuleStatus("unknown")
+	validStatus := StatusCompleted
+	invalidStatus := Status("unknown")
 	validScore := int16(90)
 	invalidScore := int16(101)
 

@@ -33,24 +33,33 @@ type CourseDetail struct {
 	Modules      []Module    `json:"modules"`
 }
 
-type ModuleStatus string
+type Status string
 
 const (
-	ModuleStatusLocked     ModuleStatus = "locked"
-	ModuleStatusUnlocked   ModuleStatus = "unlocked"
-	ModuleStatusInProgress ModuleStatus = "in_progress"
-	ModuleStatusCompleted  ModuleStatus = "completed"
+	StatusLocked     Status = "locked"
+	StatusUnlocked   Status = "unlocked"
+	StatusInProgress Status = "in_progress"
+	StatusCompleted  Status = "completed"
 )
 
+func IsValidStatus(status Status) bool {
+	switch status {
+	case StatusLocked, StatusUnlocked, StatusInProgress, StatusCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
 type Module struct {
-	ID               uuid.UUID    `json:"id"`
-	Slug             string       `json:"slug"`
-	Title            string       `json:"title"`
-	Description      *string      `json:"description"`
-	IsMandatory      bool         `json:"is_mandatory"`
-	IsEntry          bool         `json:"is_entry"`
-	Status           ModuleStatus `json:"status"`
-	EstimatedMinutes int32        `json:"estimated_minutes"`
+	ID               uuid.UUID `json:"id"`
+	Slug             string    `json:"slug"`
+	Title            string    `json:"title"`
+	Description      *string   `json:"description"`
+	IsMandatory      bool      `json:"is_mandatory"`
+	IsEntry          bool      `json:"is_entry"`
+	Status           Status    `json:"status"`
+	EstimatedMinutes int32     `json:"estimated_minutes"`
 }
 
 type ListCourseResponse struct {

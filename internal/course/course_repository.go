@@ -17,9 +17,119 @@ type Repository interface {
 	ListLessons(ctx context.Context, courseID, userID uuid.UUID) ([]model.ModuleLesson, error)
 	GetLessonDetail(ctx context.Context, courseID, lessonID uuid.UUID) (*model.LessonDetail, error)
 	UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgress, error)
+	UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error)
+}
+
+func (r *dbRepository) UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error) {
+	const prerequisiteQuery = `
+		SELECT NOT EXISTS (
+			SELECT 1
+			FROM lesson_prerequisites lp
+			LEFT JOIN user_lesson_progress prerequisite_progress
+				ON prerequisite_progress.lesson_id = lp.required_lesson_id
+				AND prerequisite_progress.user_id = $3
+			WHERE lp.lesson_id = ls.id
+				AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
+		)
+		FROM lessons ls
+		JOIN modules m ON m.id = ls.module_id
+		JOIN courses c ON c.id = m.course_id
+		WHERE ls.id = $2
+			AND c.id = $1
+			AND ls.is_published = true
+			AND m.is_published = true
+			AND c.is_published = true
+	`
+
+	var prerequisitesCompleted bool
+	if err := r.pool.QueryRow(ctx, prerequisiteQuery, courseID, lessonID, userID).Scan(&prerequisitesCompleted); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, utils.ErrLessonNotFound
+		}
+		return nil, err
+	}
+	if !prerequisitesCompleted {
+		return nil, utils.ErrLessonPrerequisiteNotCompleted
+	}
+
+	const query = `
+		INSERT INTO user_lesson_progress AS progress (
+			user_id, lesson_id, status, completed_at, updated_at
+		)
+		SELECT
+			$1,
+			ls.id,
+			$4::progress_status,
+			CASE WHEN $4::progress_status = 'completed' THEN now() END,
+			now()
+		FROM lessons ls
+		JOIN modules m ON m.id = ls.module_id
+		JOIN courses c ON c.id = m.course_id
+		WHERE ls.id = $2
+			AND c.id = $3
+			AND ls.is_published = true
+			AND m.is_published = true
+			AND c.is_published = true
+		ON CONFLICT (user_id, lesson_id) DO UPDATE SET
+			status = $4::progress_status,
+			completed_at = CASE
+				WHEN $4::progress_status = 'completed' THEN COALESCE(progress.completed_at, now())
+				ELSE NULL
+			END,
+			updated_at = now()
+		RETURNING user_id, lesson_id, status, completed_at, updated_at
+	`
+
+	var progress model.LessonProgress
+	err := r.pool.QueryRow(ctx, query, userID, lessonID, courseID, req.Status).Scan(
+		&progress.UserID,
+		&progress.LessonID,
+		&progress.Status,
+		&progress.CompletedAt,
+		&progress.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, utils.ErrLessonNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &progress, nil
 }
 
 func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgress, error) {
+	if req.Status != nil {
+		const prerequisiteQuery = `
+			SELECT NOT EXISTS (
+				SELECT 1
+				FROM module_prerequisites mp
+				LEFT JOIN user_module_progress prerequisite_progress
+					ON prerequisite_progress.module_id = mp.required_module_id
+					AND prerequisite_progress.user_id = $3
+				WHERE mp.module_id = m.id
+					AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
+			)
+			FROM modules m
+			JOIN courses c ON c.id = m.course_id
+			WHERE m.id = $2
+				AND c.id = $1
+				AND m.is_published = true
+				AND c.is_published = true
+		`
+
+		var prerequisitesCompleted bool
+		if err := r.pool.QueryRow(ctx, prerequisiteQuery, courseID, moduleID, userID).Scan(&prerequisitesCompleted); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, utils.ErrModuleNotFound
+			}
+			return nil, err
+		}
+		if !prerequisitesCompleted {
+			return nil, utils.ErrModulePrerequisiteNotCompleted
+		}
+	}
+
 	const query = `
 		INSERT INTO user_module_progress AS progress (
 			user_id, module_id, status, best_score, unlocked_at, completed_at, updated_at
@@ -204,16 +314,31 @@ func (r *dbRepository) ListLessons(ctx context.Context, courseID, userID uuid.UU
 			ls.id,
 			ls.module_id,
 			ls.slug,
-			ls.title
+			ls.title,
+			CASE
+				WHEN EXISTS (
+					SELECT 1
+					FROM lesson_prerequisites lp
+					LEFT JOIN user_lesson_progress prerequisite_progress
+						ON prerequisite_progress.lesson_id = lp.required_lesson_id
+						AND prerequisite_progress.user_id = $2
+					WHERE lp.lesson_id = ls.id
+						AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
+				) THEN 'locked'
+				ELSE COALESCE(lesson_progress.status::text, 'unlocked')
+			END
 		FROM lessons ls
 		JOIN modules m ON m.id = ls.module_id
+		LEFT JOIN user_lesson_progress lesson_progress
+			ON lesson_progress.lesson_id = ls.id
+			AND lesson_progress.user_id = $2
 		WHERE m.course_id = $1
 			AND m.is_published = true
 			AND ls.is_published = true
 		ORDER BY m.order_index ASC, ls.order_index ASC
 	`
 
-	lessonRows, err := r.pool.Query(ctx, lessonQuery, courseID)
+	lessonRows, err := r.pool.Query(ctx, lessonQuery, courseID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -227,6 +352,7 @@ func (r *dbRepository) ListLessons(ctx context.Context, courseID, userID uuid.UU
 			&moduleID,
 			&lesson.Slug,
 			&lesson.Title,
+			&lesson.Status,
 		); err != nil {
 			return nil, err
 		}

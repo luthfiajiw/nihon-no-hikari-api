@@ -8,8 +8,8 @@ import (
 )
 
 type UpsertModuleProgressRequest struct {
-	Status    *ModuleStatus `json:"status"`
-	BestScore *int16        `json:"best_score"`
+	Status    *Status `json:"status"`
+	BestScore *int16  `json:"best_score"`
 }
 
 func (r UpsertModuleProgressRequest) Validate() error {
@@ -17,9 +17,7 @@ func (r UpsertModuleProgressRequest) Validate() error {
 		return errors.New("status atau best_score wajib diisi")
 	}
 	if r.Status != nil {
-		switch *r.Status {
-		case ModuleStatusLocked, ModuleStatusUnlocked, ModuleStatusInProgress, ModuleStatusCompleted:
-		default:
+		if !IsValidStatus(*r.Status) {
 			return errors.New("status harus locked, unlocked, in_progress, atau completed")
 		}
 	}
@@ -30,13 +28,13 @@ func (r UpsertModuleProgressRequest) Validate() error {
 }
 
 type ModuleProgress struct {
-	UserID      uuid.UUID    `json:"user_id"`
-	ModuleID    uuid.UUID    `json:"module_id"`
-	Status      ModuleStatus `json:"status"`
-	BestScore   *int16       `json:"best_score"`
-	UnlockedAt  *time.Time   `json:"unlocked_at"`
-	CompletedAt *time.Time   `json:"completed_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
+	UserID      uuid.UUID  `json:"user_id"`
+	ModuleID    uuid.UUID  `json:"module_id"`
+	Status      Status     `json:"status"`
+	BestScore   *int16     `json:"best_score"`
+	UnlockedAt  *time.Time `json:"unlocked_at"`
+	CompletedAt *time.Time `json:"completed_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 type ModuleProgressResponse struct {

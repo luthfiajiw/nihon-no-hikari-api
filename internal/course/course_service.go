@@ -15,6 +15,24 @@ type Service interface {
 	GetLessons(ctx context.Context, courseID, userID uuid.UUID) (*model.ListLessonResponse, error)
 	GetLessonDetail(ctx context.Context, courseID, lessonID uuid.UUID) (*model.LessonDetailResponse, error)
 	UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgressResponse, error)
+	UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgressResponse, error)
+}
+
+func (s *service) UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgressResponse, error) {
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %v", utils.ErrInvalidLessonProgress, err)
+	}
+
+	progress, err := s.repository.UpsertLessonProgress(ctx, courseID, lessonID, userID, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.LessonProgressResponse{
+		Success: true,
+		Message: "progress pelajaran berhasil disimpan",
+		Data:    *progress,
+	}, nil
 }
 
 func (s *service) UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgressResponse, error) {

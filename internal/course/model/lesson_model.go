@@ -3,9 +3,10 @@ package model
 import "github.com/google/uuid"
 
 type Lesson struct {
-	ID    uuid.UUID `json:"id"`
-	Slug  string    `json:"slug"`
-	Title string    `json:"title"`
+	ID     uuid.UUID `json:"id"`
+	Slug   string    `json:"slug"`
+	Title  string    `json:"title"`
+	Status Status    `json:"status"`
 }
 
 type LessonDetail struct {

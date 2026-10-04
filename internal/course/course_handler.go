@@ -59,6 +59,8 @@ func (h *Handler) upsertLessonProgress(c fiber.Ctx) error {
 			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		case errors.Is(err, utils.ErrLessonPrerequisiteNotCompleted):
 			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrLessonCompletionRequiresQuiz):
+			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		default:
 			return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		}
@@ -156,7 +158,15 @@ func (h *Handler) getLessonDetail(c fiber.Ctx) error {
 		})
 	}
 
-	res, err := h.service.GetLessonDetail(c.Context(), courseID, lessonID)
+	userID, ok := c.Locals(utils.UserIDKey).(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   "user tidak terautentikasi",
+		})
+	}
+
+	res, err := h.service.GetLessonDetail(c.Context(), courseID, lessonID, userID)
 	if err != nil {
 		if errors.Is(err, utils.ErrLessonNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{

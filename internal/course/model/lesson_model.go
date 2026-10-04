@@ -1,6 +1,10 @@
 package model
 
-import "github.com/google/uuid"
+import (
+	"nihon-no-hikari-api/internal/question"
+
+	"github.com/google/uuid"
+)
 
 type Lesson struct {
 	ID     uuid.UUID `json:"id"`
@@ -10,10 +14,11 @@ type Lesson struct {
 }
 
 type LessonDetail struct {
-	ID      uuid.UUID `json:"id"`
-	Slug    string    `json:"slug"`
-	Title   string    `json:"title"`
-	Content string    `json:"content"`
+	ID           uuid.UUID              `json:"id"`
+	Slug         string                 `json:"slug"`
+	Title        string                 `json:"title"`
+	Content      string                 `json:"content"`
+	QuestionSets []question.QuestionSet `json:"question_sets"`
 }
 
 type ModuleLesson struct {

@@ -71,8 +71,12 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, courseID, lesso
 			AND m.is_published = true
 			AND c.is_published = true
 		ON CONFLICT (user_id, lesson_id) DO UPDATE SET
-			status = $4::progress_status,
+			status = CASE
+				WHEN progress.status = 'completed' THEN progress.status
+				ELSE $4::progress_status
+			END,
 			completed_at = CASE
+				WHEN progress.status = 'completed' THEN progress.completed_at
 				WHEN $4::progress_status = 'completed' THEN COALESCE(progress.completed_at, now())
 				ELSE NULL
 			END,

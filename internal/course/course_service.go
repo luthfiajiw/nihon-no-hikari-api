@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"nihon-no-hikari-api/internal/course/model"
+	"nihon-no-hikari-api/internal/question"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ type Service interface {
 	GetList(ctx context.Context) (*model.ListCourseResponse, error)
 	GetDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetailResponse, error)
 	GetLessons(ctx context.Context, courseID, userID uuid.UUID) (*model.ListLessonResponse, error)
-	GetLessonDetail(ctx context.Context, courseID, lessonID uuid.UUID) (*model.LessonDetailResponse, error)
+	GetLessonDetail(ctx context.Context, courseID, lessonID, userID uuid.UUID) (*model.LessonDetailResponse, error)
 	UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgressResponse, error)
 	UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgressResponse, error)
 }
@@ -21,6 +22,9 @@ type Service interface {
 func (s *service) UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgressResponse, error) {
 	if err := req.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %v", utils.ErrInvalidLessonProgress, err)
+	}
+	if req.Status != nil && *req.Status == model.StatusCompleted {
+		return nil, utils.ErrLessonCompletionRequiresQuiz
 	}
 
 	progress, err := s.repository.UpsertLessonProgress(ctx, courseID, lessonID, userID, req)
@@ -65,11 +69,16 @@ func (s *service) GetDetail(ctx context.Context, courseID, userID uuid.UUID) (*m
 	}, nil
 }
 
-func (s *service) GetLessonDetail(ctx context.Context, courseID, lessonID uuid.UUID) (*model.LessonDetailResponse, error) {
+func (s *service) GetLessonDetail(ctx context.Context, courseID, lessonID, userID uuid.UUID) (*model.LessonDetailResponse, error) {
 	lesson, err := s.repository.GetLessonDetail(ctx, courseID, lessonID)
 	if err != nil {
 		return nil, err
 	}
+	questionSets, err := s.questionRepository.ListQuestionSets(ctx, courseID, lessonID, userID)
+	if err != nil {
+		return nil, err
+	}
+	lesson.QuestionSets = questionSets
 
 	return &model.LessonDetailResponse{
 		Success: true,
@@ -92,11 +101,12 @@ func (s *service) GetLessons(ctx context.Context, courseID, userID uuid.UUID) (*
 }
 
 type service struct {
-	repository Repository
+	repository         Repository
+	questionRepository question.Repository
 }
 
-func NewService(repository Repository) Service {
-	return &service{repository: repository}
+func NewService(repository Repository, questionRepository question.Repository) Service {
+	return &service{repository: repository, questionRepository: questionRepository}
 }
 
 func (s *service) GetList(ctx context.Context) (*model.ListCourseResponse, error) {

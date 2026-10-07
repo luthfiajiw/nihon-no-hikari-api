@@ -2,8 +2,12 @@ package question
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 )
@@ -12,9 +16,10 @@ func TestSubmitAttemptRequestValidate(t *testing.T) {
 	questionID := uuid.New()
 	otherQuestionID := uuid.New()
 	optionID := uuid.New()
-	answerText := "あ"
-	emptyText := "   "
-	longText := strings.Repeat("a", 256)
+	strokeInput := json.RawMessage(`[{"x":10,"y":20,"t":0}]`)
+	invalidStrokeInput := json.RawMessage(`{"x":`)
+	nullStrokeInput := json.RawMessage(`null`)
+	largeStrokeInput := json.RawMessage(`"` + strings.Repeat("a", 64*1024) + `"`)
 
 	tests := []struct {
 		name    string
@@ -22,13 +27,15 @@ func TestSubmitAttemptRequestValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "option answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID}}}},
-		{name: "text answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, AnswerText: &answerText}}}},
+		{name: "stroke answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: strokeInput}}}},
 		{name: "missing answers", request: SubmitAttemptRequest{}, wantErr: true},
-		{name: "missing question id", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{AnswerText: &answerText}}}, wantErr: true},
-		{name: "duplicate question", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, AnswerText: &answerText}, {QuestionID: questionID, SelectedOptionID: &optionID}}}, wantErr: true},
-		{name: "both answer forms", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID, AnswerText: &answerText}}}, wantErr: true},
-		{name: "empty answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, AnswerText: &emptyText}}}, wantErr: true},
-		{name: "too long", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: otherQuestionID, AnswerText: &longText}}}, wantErr: true},
+		{name: "missing question id", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{StrokeInput: strokeInput}}}, wantErr: true},
+		{name: "duplicate question", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: strokeInput}, {QuestionID: questionID, SelectedOptionID: &optionID}}}, wantErr: true},
+		{name: "both answer forms", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID, StrokeInput: strokeInput}}}, wantErr: true},
+		{name: "empty answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID}}}, wantErr: true},
+		{name: "null stroke", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: nullStrokeInput}}}, wantErr: true},
+		{name: "invalid stroke JSON", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: invalidStrokeInput}}}, wantErr: true},
+		{name: "stroke too large", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: otherQuestionID, StrokeInput: largeStrokeInput}}}, wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -50,17 +57,12 @@ func TestSkillIsSupported(t *testing.T) {
 	}
 }
 
-func TestGradeAnswerNormalizesJapaneseText(t *testing.T) {
-	correctAnswer := "が"
-	decomposedAnswer := "か\u3099"
-	item := gradingQuestion{CorrectAnswer: &correctAnswer}
-	answer := SubmitAnswerRequest{AnswerText: &decomposedAnswer}
+func TestGradeAnswerRejectsStrokeWithoutServerEvaluator(t *testing.T) {
+	item := gradingQuestion{QuestionType: QuestionTypeStrokeWriting}
+	answer := SubmitAnswerRequest{StrokeInput: json.RawMessage(`[{"x":10,"y":20}]`)}
 
-	isCorrect, err := gradeAnswer(context.Background(), nil, item, answer)
-	if err != nil {
-		t.Fatalf("gradeAnswer() error = %v", err)
-	}
-	if !isCorrect {
-		t.Fatal("canonically equivalent Japanese answer should be correct")
+	_, err := gradeAnswer(context.Background(), nil, item, answer)
+	if !errors.Is(err, utils.ErrInvalidQuestionConfiguration) {
+		t.Fatalf("gradeAnswer() error = %v, want ErrInvalidQuestionConfiguration", err)
 	}
 }

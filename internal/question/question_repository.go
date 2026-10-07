@@ -3,7 +3,6 @@ package question
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"nihon-no-hikari-api/pkg/utils"
@@ -11,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/text/unicode/norm"
 )
 
 type Repository interface {
@@ -27,6 +25,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, courseID, lesso
 			qs.id,
 			qs.lesson_id,
 			qs.title,
+			qs.order_index,
 			qs.skill,
 			qs.passing_score,
 			LEAST(
@@ -64,6 +63,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, courseID, lesso
 		&detail.ID,
 		&detail.LessonID,
 		&detail.Title,
+		&detail.OrderIndex,
 		&detail.Skill,
 		&detail.PassingScore,
 		&detail.QuestionCount,
@@ -81,7 +81,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, courseID, lesso
 		return nil, err
 	}
 
-	detail.Questions, err = loadQuestionSetQuestions(ctx, r.pool, questionSetID)
+	detail.Questions, err = loadQuestionSetQuestions(ctx, r.pool, questionSetID, detail.ShuffleQuestions)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +123,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, courseID, lessonID,
 			qs.id,
 			qs.lesson_id,
 			qs.title,
+			qs.order_index,
 			qs.skill,
 			qs.passing_score,
 			LEAST(COALESCE(qs.total_questions::integer, COUNT(q.id)::integer), COUNT(q.id)::integer)::integer,
@@ -144,7 +145,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, courseID, lessonID,
 			AND qs.kind = 'practice'
 			AND qs.is_published = true
 		GROUP BY qs.id
-		ORDER BY qs.created_at, qs.id
+		ORDER BY qs.order_index, qs.id
 	`
 
 	rows, err := r.pool.Query(ctx, query, lessonID, userID)
@@ -160,6 +161,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, courseID, lessonID,
 			&set.ID,
 			&set.LessonID,
 			&set.Title,
+			&set.OrderIndex,
 			&set.Skill,
 			&set.PassingScore,
 			&set.QuestionCount,
@@ -193,6 +195,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 			qs.id,
 			qs.lesson_id,
 			qs.title,
+			qs.order_index,
 			qs.skill,
 			qs.passing_score,
 			qs.total_questions,
@@ -343,7 +346,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 
 func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUID, limit int32, shuffle bool) ([]Question, error) {
 	const query = `
-		SELECT id, question_type, skill, prompt_text, prompt_media_url, points, order_index
+		SELECT id, question_type, skill, prompt_text, stimulus_text, stimulus_media_url, points, order_index
 		FROM questions
 		WHERE question_set_id = $1
 		ORDER BY
@@ -364,7 +367,8 @@ func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUI
 			&item.QuestionType,
 			&item.Skill,
 			&item.PromptText,
-			&item.PromptMediaURL,
+			&item.StimulusText,
+			&item.StimulusMediaURL,
 			&item.Points,
 			&item.OrderIndex,
 		); err != nil {
@@ -393,14 +397,18 @@ type rowsQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func loadQuestionSetQuestions(ctx context.Context, querier rowsQuerier, questionSetID uuid.UUID) ([]Question, error) {
+func loadQuestionSetQuestions(ctx context.Context, querier rowsQuerier, questionSetID uuid.UUID, shuffle bool) ([]Question, error) {
 	const query = `
-		SELECT id, question_type, skill, prompt_text, prompt_media_url, points, order_index
+		SELECT id, question_type, skill, prompt_text, stimulus_text, stimulus_media_url, points, order_index
 		FROM questions
 		WHERE question_set_id = $1
-		ORDER BY order_index, id
+		ORDER BY
+			CASE WHEN $2 THEN random() ELSE order_index::double precision END,
+			order_index,
+			id
+		LIMIT 15
 	`
-	rows, err := querier.Query(ctx, query, questionSetID)
+	rows, err := querier.Query(ctx, query, questionSetID, shuffle)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +421,8 @@ func loadQuestionSetQuestions(ctx context.Context, querier rowsQuerier, question
 			&item.QuestionType,
 			&item.Skill,
 			&item.PromptText,
-			&item.PromptMediaURL,
+			&item.StimulusText,
+			&item.StimulusMediaURL,
 			&item.Points,
 			&item.OrderIndex,
 		); err != nil {
@@ -468,11 +477,11 @@ func loadQuestionOptions(ctx context.Context, querier rowsQuerier, questionID uu
 }
 
 type gradingQuestion struct {
-	ID            uuid.UUID
-	Skill         Skill
-	CorrectAnswer *string
-	Explanation   *string
-	Points        int16
+	ID           uuid.UUID
+	QuestionType QuestionType
+	Skill        Skill
+	Explanation  *string
+	Points       int16
 }
 
 func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*AttemptResult, error) {
@@ -525,7 +534,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 	}
 
 	const questionsQuery = `
-		SELECT q.id, q.skill, q.correct_answer, q.explanation, q.points
+		SELECT q.id, q.question_type, q.skill, q.explanation, q.points
 		FROM attempt_answers aa
 		JOIN questions q ON q.id = aa.question_id
 		WHERE aa.attempt_id = $1
@@ -538,7 +547,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 	questions := make([]gradingQuestion, 0)
 	for rows.Next() {
 		var item gradingQuestion
-		if err := rows.Scan(&item.ID, &item.Skill, &item.CorrectAnswer, &item.Explanation, &item.Points); err != nil {
+		if err := rows.Scan(&item.ID, &item.QuestionType, &item.Skill, &item.Explanation, &item.Points); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -588,13 +597,13 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 		const updateAnswerQuery = `
 			UPDATE attempt_answers
 			SET selected_option_id = $3,
-				answer_text = $4,
+				stroke_input = $4,
 				is_correct = $5,
 				earned_points = $6,
 				answered_at = now()
 			WHERE attempt_id = $1 AND question_id = $2
 		`
-		if _, err := tx.Exec(ctx, updateAnswerQuery, attemptID, item.ID, answer.SelectedOptionID, answer.AnswerText, isCorrect, earned); err != nil {
+		if _, err := tx.Exec(ctx, updateAnswerQuery, attemptID, item.ID, answer.SelectedOptionID, answer.StrokeInput, isCorrect, earned); err != nil {
 			return nil, err
 		}
 
@@ -718,24 +727,20 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 }
 
 func gradeAnswer(ctx context.Context, tx pgx.Tx, item gradingQuestion, answer SubmitAnswerRequest) (bool, error) {
-	if answer.SelectedOptionID != nil {
-		const query = `SELECT is_correct FROM question_options WHERE id = $1 AND question_id = $2`
-		var isCorrect bool
-		if err := tx.QueryRow(ctx, query, *answer.SelectedOptionID, item.ID).Scan(&isCorrect); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return false, utils.ErrInvalidAttempt
-			}
-			return false, err
-		}
-		return isCorrect, nil
-	}
-	if answer.AnswerText == nil {
-		return false, utils.ErrInvalidAttempt
-	}
-	if item.CorrectAnswer == nil || strings.TrimSpace(*item.CorrectAnswer) == "" {
+	if item.QuestionType != QuestionTypeMultipleChoice {
 		return false, utils.ErrInvalidQuestionConfiguration
 	}
-	actual := norm.NFKC.String(strings.TrimSpace(*answer.AnswerText))
-	expected := norm.NFKC.String(strings.TrimSpace(*item.CorrectAnswer))
-	return strings.EqualFold(actual, expected), nil
+	if answer.SelectedOptionID == nil || len(answer.StrokeInput) != 0 {
+		return false, utils.ErrInvalidAttempt
+	}
+
+	const query = `SELECT is_correct FROM question_options WHERE id = $1 AND question_id = $2`
+	var isCorrect bool
+	if err := tx.QueryRow(ctx, query, *answer.SelectedOptionID, item.ID).Scan(&isCorrect); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, utils.ErrInvalidAttempt
+		}
+		return false, err
+	}
+	return isCorrect, nil
 }

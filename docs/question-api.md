@@ -2,13 +2,33 @@
 
 Semua endpoint membutuhkan header `Authorization: Bearer <access-token>`.
 
+## Model soal
+
+Question hanya memiliki dua tipe:
+
+- `multiple_choice`
+- `stroke_writing`
+
+Konten question dipisahkan menjadi:
+
+- `prompt_text`: instruksi, misalnya `Bagaimana cara membaca karakter ini?`
+- `stimulus_text`: teks yang ditonjolkan, misalnya `あ` atau `saya mau pergi ke sekolah`
+- `stimulus_media_url`: alternatif stimulus berupa gambar atau media
+- `options`: pilihan jawaban yang dapat berisi teks Jepang maupun Indonesia
+
+Setiap question wajib mempunyai `prompt_text` dan minimal salah satu dari
+`stimulus_text` atau `stimulus_media_url`.
+
 ## 1. Daftar question set
 
 ```http
 GET /api/v1/courses/{courseId}/lessons/{lessonId}/question-sets
 ```
 
-Respons berisi konfigurasi kelulusan, jumlah soal efektif, `is_passed`, dan `attempts_used` untuk pengguna aktif. Hanya question set `practice` yang published yang dikembalikan.
+Respons berisi konfigurasi kelulusan, jumlah soal efektif, `order_index`,
+`is_passed`, dan `attempts_used` untuk pengguna aktif. Question set diurutkan
+berdasarkan `order_index`. Hanya question set `practice` yang published yang
+dikembalikan.
 
 ## 2. Detail question set
 
@@ -16,7 +36,28 @@ Respons berisi konfigurasi kelulusan, jumlah soal efektif, `is_passed`, dan `att
 GET /api/v1/courses/{courseId}/lessons/{lessonId}/question-sets/{questionSetId}
 ```
 
-Respons berisi metadata question set, seluruh `questions`, dan `options` pada setiap question. Field internal penilaian seperti `questions.correct_answer` dan `question_options.is_correct` tidak dikirim.
+Respons berisi metadata question set, seluruh `questions`, stimulus, dan
+`options` pada setiap question. Field internal `question_options.is_correct`
+tidak dikirim.
+
+Contoh question:
+
+```json
+{
+  "id": "<uuid>",
+  "question_type": "multiple_choice",
+  "skill": "reading",
+  "prompt_text": "Bagaimana cara membaca karakter ini?",
+  "stimulus_text": "あ",
+  "stimulus_media_url": null,
+  "points": 1,
+  "order_index": 0,
+  "options": [
+    { "id": "<uuid>", "label": "a", "media_url": null, "order_index": 0 },
+    { "id": "<uuid>", "label": "i", "media_url": null, "order_index": 1 }
+  ]
+}
+```
 
 ## 3. Mulai attempt
 
@@ -24,7 +65,10 @@ Respons berisi metadata question set, seluruh `questions`, dan `options` pada se
 POST /api/v1/courses/{courseId}/lessons/{lessonId}/question-sets/{questionSetId}/attempts
 ```
 
-Endpoint ini membuat attempt dan mengembalikan soal beserta opsi tanpa `is_correct` atau `correct_answer`. Urutan soal mengikuti `shuffle_questions`, sedangkan jumlahnya mengikuti `total_questions`. `expires_at` tersedia jika question set memiliki batas waktu.
+Endpoint membuat attempt dan mengembalikan soal beserta stimulus dan opsi tanpa
+`is_correct`. Urutan soal mengikuti `shuffle_questions`, sedangkan jumlahnya
+mengikuti `total_questions`. `expires_at` tersedia jika question set memiliki
+batas waktu.
 
 ## 4. Submit attempt
 
@@ -37,26 +81,34 @@ Content-Type: application/json
     {
       "question_id": "<uuid>",
       "selected_option_id": "<uuid>"
-    },
-    {
-      "question_id": "<uuid>",
-      "answer_text": "あ"
     }
   ]
 }
 ```
 
-Setiap jawaban wajib menggunakan tepat satu dari `selected_option_id` atau `answer_text`. Semua soal pada attempt harus dijawab dan tidak boleh duplikat.
+Setiap jawaban wajib menggunakan tepat satu dari `selected_option_id` atau
+`stroke_input`. Semua soal pada attempt harus dijawab dan `question_id` tidak
+boleh duplikat. `stroke_input` harus berupa JSON valid dengan ukuran maksimal
+64 KiB.
 
 ## Aturan penilaian
 
 - Hanya skill `reading` dan `writing` yang diterima untuk kelulusan lesson.
-- Opsi dinilai dari `question_options.is_correct`; teks dinilai case-insensitive setelah spasi awal/akhir dibuang dan Unicode dinormalisasi terhadap `questions.correct_answer`.
+- Pilihan ganda dinilai dari `question_options.is_correct`.
+- Setiap pilihan ganda published wajib mempunyai minimal dua opsi dan tepat
+  satu opsi benar.
 - Nilai menggunakan bobot `questions.points`.
-- Nilai total dan setiap skill yang muncul harus mencapai `question_sets.passing_score`.
-- Jika lesson mempunyai beberapa question set published, pengguna harus pernah lulus semuanya.
-- `max_attempts`, `cooldown_minutes`, dan `time_limit_seconds` diterapkan oleh server.
+- Nilai total dan setiap skill yang muncul harus mencapai
+  `question_sets.passing_score`.
+- Jika lesson mempunyai beberapa question set published, pengguna harus pernah
+  lulus semuanya.
+- `max_attempts`, `cooldown_minutes`, dan `time_limit_seconds` diterapkan oleh
+  server.
 - Kegagalan attempt tidak menurunkan lesson yang sebelumnya sudah completed.
-- `PUT .../progress` tidak menerima status `completed`; completion hanya dapat berasal dari penilaian attempt.
+- `PUT .../progress` tidak menerima status `completed`; completion hanya dapat
+  berasal dari penilaian attempt.
 
-`stroke_writing` belum dinilai oleh endpoint ini. Gunakan jawaban teks untuk writing sampai tersedia evaluator stroke server-side; menerima skor akurasi dari klien akan mudah dimanipulasi.
+`stroke_writing` sudah menjadi bagian dari schema request melalui
+`stroke_input`, tetapi question bertipe ini belum boleh dipublikasikan sebelum
+evaluator stroke server-side tersedia. Skor akurasi tidak diterima dari client
+karena mudah dimanipulasi.

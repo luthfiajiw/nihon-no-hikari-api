@@ -1,19 +1,24 @@
 package question
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
 
 type Skill string
 
+type QuestionType string
+
 const (
 	SkillReading Skill = "reading"
 	SkillWriting Skill = "writing"
+
+	QuestionTypeMultipleChoice QuestionType = "multiple_choice"
+	QuestionTypeStrokeWriting  QuestionType = "stroke_writing"
 )
 
 func (s Skill) IsSupported() bool {
@@ -28,20 +33,22 @@ type QuestionOption struct {
 }
 
 type Question struct {
-	ID             uuid.UUID        `json:"id"`
-	QuestionType   string           `json:"question_type"`
-	Skill          Skill            `json:"skill"`
-	PromptText     *string          `json:"prompt_text"`
-	PromptMediaURL *string          `json:"prompt_media_url"`
-	Points         int16            `json:"points"`
-	OrderIndex     int16            `json:"order_index"`
-	Options        []QuestionOption `json:"options"`
+	ID               uuid.UUID        `json:"id"`
+	QuestionType     QuestionType     `json:"question_type"`
+	Skill            Skill            `json:"skill"`
+	PromptText       string           `json:"prompt_text"`
+	StimulusText     *string          `json:"stimulus_text"`
+	StimulusMediaURL *string          `json:"stimulus_media_url"`
+	Points           int16            `json:"points"`
+	OrderIndex       int16            `json:"order_index"`
+	Options          []QuestionOption `json:"options"`
 }
 
 type QuestionSet struct {
 	ID               uuid.UUID `json:"id"`
 	LessonID         uuid.UUID `json:"lesson_id"`
 	Title            string    `json:"title"`
+	OrderIndex       int16     `json:"order_index"`
 	Skill            *Skill    `json:"skill"`
 	PassingScore     int16     `json:"passing_score"`
 	QuestionCount    int32     `json:"question_count"`
@@ -87,9 +94,9 @@ type StartAttemptResponse struct {
 }
 
 type SubmitAnswerRequest struct {
-	QuestionID       uuid.UUID  `json:"question_id"`
-	SelectedOptionID *uuid.UUID `json:"selected_option_id"`
-	AnswerText       *string    `json:"answer_text"`
+	QuestionID       uuid.UUID       `json:"question_id"`
+	SelectedOptionID *uuid.UUID      `json:"selected_option_id"`
+	StrokeInput      json.RawMessage `json:"stroke_input"`
 }
 
 type SubmitAttemptRequest struct {
@@ -112,12 +119,16 @@ func (r SubmitAttemptRequest) Validate() error {
 		seen[answer.QuestionID] = struct{}{}
 
 		hasOption := answer.SelectedOptionID != nil && *answer.SelectedOptionID != uuid.Nil
-		hasText := answer.AnswerText != nil && strings.TrimSpace(*answer.AnswerText) != ""
-		if hasOption == hasText {
-			return errors.New("setiap jawaban harus memiliki tepat satu selected_option_id atau answer_text")
+		trimmedStroke := bytes.TrimSpace(answer.StrokeInput)
+		hasStroke := len(trimmedStroke) > 0 && !bytes.Equal(trimmedStroke, []byte("null"))
+		if hasOption == hasStroke {
+			return errors.New("setiap jawaban harus memiliki tepat satu selected_option_id atau stroke_input")
 		}
-		if answer.AnswerText != nil && utf8.RuneCountInString(*answer.AnswerText) > 255 {
-			return errors.New("answer_text maksimal 255 karakter")
+		if hasStroke && !json.Valid(trimmedStroke) {
+			return errors.New("stroke_input harus berupa JSON valid")
+		}
+		if hasStroke && len(trimmedStroke) > 64*1024 {
+			return errors.New("stroke_input maksimal 64 KiB")
 		}
 	}
 

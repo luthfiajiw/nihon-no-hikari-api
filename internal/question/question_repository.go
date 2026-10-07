@@ -247,7 +247,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 	if set.QuestionCount <= 0 {
 		return nil, utils.ErrQuestionSetEmpty
 	}
-	if (set.TimeLimitSeconds != nil && *set.TimeLimitSeconds <= 0) ||
+	if (set.TimeLimitSeconds != nil && *set.TimeLimitSeconds < 0) ||
 		(set.MaxAttempts != nil && *set.MaxAttempts <= 0) || set.CooldownMinutes < 0 {
 		return nil, utils.ErrInvalidQuestionConfiguration
 	}
@@ -334,7 +334,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 		}
 	}
 
-	if set.TimeLimitSeconds != nil {
+	if set.TimeLimitSeconds != nil && *set.TimeLimitSeconds > 0 {
 		expiresAt := attempt.StartedAt.Add(time.Duration(*set.TimeLimitSeconds) * time.Second)
 		attempt.ExpiresAt = &expiresAt
 	}
@@ -529,7 +529,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 	if status != "in_progress" {
 		return nil, utils.ErrAttemptAlreadySubmitted
 	}
-	if timeLimitSeconds != nil && time.Now().After(startedAt.Add(time.Duration(*timeLimitSeconds)*time.Second)) {
+	if timeLimitSeconds != nil && *timeLimitSeconds > 0 && time.Now().After(startedAt.Add(time.Duration(*timeLimitSeconds)*time.Second)) {
 		return nil, utils.ErrAttemptExpired
 	}
 

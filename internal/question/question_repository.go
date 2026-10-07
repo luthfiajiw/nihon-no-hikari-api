@@ -610,7 +610,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 				answered_at = now()
 			WHERE attempt_id = $1 AND question_id = $2
 		`
-		if _, err := tx.Exec(ctx, updateAnswerQuery, attemptID, item.ID, answer.SelectedOptionID, answer.StrokeInput, isCorrect, earned); err != nil {
+		if _, err := tx.Exec(ctx, updateAnswerQuery, attemptID, item.ID, answer.SelectedOptionID, answer.normalizedStrokeInput(), isCorrect, earned); err != nil {
 			return nil, err
 		}
 
@@ -737,7 +737,7 @@ func gradeAnswer(ctx context.Context, tx pgx.Tx, item gradingQuestion, answer Su
 	if item.QuestionType != QuestionTypeMultipleChoice {
 		return false, utils.ErrInvalidQuestionConfiguration
 	}
-	if answer.SelectedOptionID == nil || len(answer.StrokeInput) != 0 {
+	if answer.SelectedOptionID == nil || len(answer.normalizedStrokeInput()) != 0 {
 		return false, utils.ErrInvalidAttempt
 	}
 

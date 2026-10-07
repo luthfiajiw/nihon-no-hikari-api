@@ -98,9 +98,9 @@ type StartAttemptResponse struct {
 }
 
 type SubmitAnswerRequest struct {
-	QuestionID       uuid.UUID       `json:"question_id"`
-	SelectedOptionID *uuid.UUID      `json:"selected_option_id"`
-	StrokeInput      json.RawMessage `json:"stroke_input"`
+	QuestionID       uuid.UUID        `json:"question_id"`
+	SelectedOptionID *uuid.UUID       `json:"selected_option_id"`
+	StrokeInput      *json.RawMessage `json:"stroke_input"`
 }
 
 type SubmitAttemptRequest struct {
@@ -123,7 +123,7 @@ func (r SubmitAttemptRequest) Validate() error {
 		seen[answer.QuestionID] = struct{}{}
 
 		hasOption := answer.SelectedOptionID != nil && *answer.SelectedOptionID != uuid.Nil
-		trimmedStroke := bytes.TrimSpace(answer.StrokeInput)
+		trimmedStroke := answer.normalizedStrokeInput()
 		hasStroke := len(trimmedStroke) > 0 && !bytes.Equal(trimmedStroke, []byte("null"))
 		if hasOption == hasStroke {
 			return errors.New("setiap jawaban harus memiliki tepat satu selected_option_id atau stroke_input")
@@ -137,6 +137,17 @@ func (r SubmitAttemptRequest) Validate() error {
 	}
 
 	return nil
+}
+
+func (r SubmitAnswerRequest) normalizedStrokeInput() json.RawMessage {
+	if r.StrokeInput == nil {
+		return nil
+	}
+	trimmed := bytes.TrimSpace(*r.StrokeInput)
+	if bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	return trimmed
 }
 
 type AnswerResult struct {

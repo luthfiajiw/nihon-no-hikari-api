@@ -27,15 +27,15 @@ func TestSubmitAttemptRequestValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "option answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID}}}},
-		{name: "stroke answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: strokeInput}}}},
+		{name: "stroke answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &strokeInput}}}},
 		{name: "missing answers", request: SubmitAttemptRequest{}, wantErr: true},
-		{name: "missing question id", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{StrokeInput: strokeInput}}}, wantErr: true},
-		{name: "duplicate question", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: strokeInput}, {QuestionID: questionID, SelectedOptionID: &optionID}}}, wantErr: true},
-		{name: "both answer forms", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID, StrokeInput: strokeInput}}}, wantErr: true},
+		{name: "missing question id", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{StrokeInput: &strokeInput}}}, wantErr: true},
+		{name: "duplicate question", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &strokeInput}, {QuestionID: questionID, SelectedOptionID: &optionID}}}, wantErr: true},
+		{name: "both answer forms", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID, StrokeInput: &strokeInput}}}, wantErr: true},
 		{name: "empty answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID}}}, wantErr: true},
-		{name: "null stroke", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: nullStrokeInput}}}, wantErr: true},
-		{name: "invalid stroke JSON", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: invalidStrokeInput}}}, wantErr: true},
-		{name: "stroke too large", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: otherQuestionID, StrokeInput: largeStrokeInput}}}, wantErr: true},
+		{name: "null stroke", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &nullStrokeInput}}}, wantErr: true},
+		{name: "invalid stroke JSON", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &invalidStrokeInput}}}, wantErr: true},
+		{name: "stroke too large", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: otherQuestionID, StrokeInput: &largeStrokeInput}}}, wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -45,6 +45,21 @@ func TestSubmitAttemptRequestValidate(t *testing.T) {
 				t.Fatalf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestSubmitAttemptRequestAllowsNullStrokeForOptionAnswer(t *testing.T) {
+	requestJSON := `{"answers":[{"question_id":"` + uuid.NewString() + `","selected_option_id":"` + uuid.NewString() + `","stroke_input":null}]}`
+
+	var request SubmitAttemptRequest
+	if err := json.Unmarshal([]byte(requestJSON), &request); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if request.Answers[0].StrokeInput != nil {
+		t.Fatal("StrokeInput should be nil when JSON value is null")
+	}
+	if err := request.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
 	}
 }
 
@@ -59,7 +74,8 @@ func TestSkillIsSupported(t *testing.T) {
 
 func TestGradeAnswerRejectsStrokeWithoutServerEvaluator(t *testing.T) {
 	item := gradingQuestion{QuestionType: QuestionTypeStrokeWriting}
-	answer := SubmitAnswerRequest{StrokeInput: json.RawMessage(`[{"x":10,"y":20}]`)}
+	strokeInput := json.RawMessage(`[{"x":10,"y":20}]`)
+	answer := SubmitAnswerRequest{StrokeInput: &strokeInput}
 
 	_, err := gradeAnswer(context.Background(), nil, item, answer)
 	if !errors.Is(err, utils.ErrInvalidQuestionConfiguration) {

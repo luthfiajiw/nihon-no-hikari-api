@@ -25,8 +25,9 @@ Setiap question wajib mempunyai `prompt_text` dan minimal salah satu dari
 GET /api/v1/courses/{courseId}/lessons/{lessonId}/question-sets
 ```
 
-Respons berisi konfigurasi kelulusan, jumlah soal efektif, `order_index`,
-`is_passed`, dan `attempts_used` untuk pengguna aktif. Question set diurutkan
+Respons berisi `kind`, konfigurasi kelulusan, jumlah soal efektif, `order_index`,
+`is_passed`, dan `attempts_used` untuk pengguna aktif. Nilai `kind` pada endpoint lesson ini adalah `practice`.
+Question set diurutkan
 berdasarkan `order_index`. Hanya question set `practice` yang published yang
 dikembalikan.
 

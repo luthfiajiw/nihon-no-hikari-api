@@ -10,8 +10,8 @@ import (
 )
 
 type Skill string
-
 type QuestionType string
+type QuestionSetKind string
 
 const (
 	SkillReading Skill = "reading"
@@ -19,6 +19,9 @@ const (
 
 	QuestionTypeMultipleChoice QuestionType = "multiple_choice"
 	QuestionTypeStrokeWriting  QuestionType = "stroke_writing"
+
+	QuestionSetKindPractice  QuestionSetKind = "practice"
+	QuestionSetKindFinalExam QuestionSetKind = "final_exam"
 )
 
 func (s Skill) IsSupported() bool {
@@ -45,19 +48,20 @@ type Question struct {
 }
 
 type QuestionSet struct {
-	ID               uuid.UUID `json:"id"`
-	LessonID         uuid.UUID `json:"lesson_id"`
-	Title            string    `json:"title"`
-	OrderIndex       int16     `json:"order_index"`
-	Skill            *Skill    `json:"skill"`
-	PassingScore     int16     `json:"passing_score"`
-	QuestionCount    int32     `json:"question_count"`
-	TimeLimitSeconds *int32    `json:"time_limit_seconds"`
-	MaxAttempts      *int16    `json:"max_attempts"`
-	CooldownMinutes  int32     `json:"cooldown_minutes"`
-	ShuffleQuestions bool      `json:"shuffle_questions"`
-	IsPassed         bool      `json:"is_passed"`
-	AttemptsUsed     int32     `json:"attempts_used"`
+	ID               uuid.UUID       `json:"id"`
+	LessonID         uuid.UUID       `json:"lesson_id"`
+	Kind             QuestionSetKind `json:"kind"`
+	Title            string          `json:"title"`
+	OrderIndex       int16           `json:"order_index"`
+	Skill            *Skill          `json:"skill"`
+	PassingScore     int16           `json:"passing_score"`
+	QuestionCount    int32           `json:"question_count"`
+	TimeLimitSeconds *int32          `json:"time_limit_seconds"`
+	MaxAttempts      *int16          `json:"max_attempts"`
+	CooldownMinutes  int32           `json:"cooldown_minutes"`
+	ShuffleQuestions bool            `json:"shuffle_questions"`
+	IsPassed         bool            `json:"is_passed"`
+	AttemptsUsed     int32           `json:"attempts_used"`
 }
 
 type ListQuestionSetsResponse struct {

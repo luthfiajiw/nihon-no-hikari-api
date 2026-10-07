@@ -24,6 +24,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, courseID, lesso
 		SELECT
 			qs.id,
 			qs.lesson_id,
+			qs.kind,
 			qs.title,
 			qs.order_index,
 			qs.skill,
@@ -62,6 +63,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, courseID, lesso
 	err := r.pool.QueryRow(ctx, query, courseID, lessonID, questionSetID, userID).Scan(
 		&detail.ID,
 		&detail.LessonID,
+		&detail.Kind,
 		&detail.Title,
 		&detail.OrderIndex,
 		&detail.Skill,
@@ -122,6 +124,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, courseID, lessonID,
 		SELECT
 			qs.id,
 			qs.lesson_id,
+			qs.kind,
 			qs.title,
 			qs.order_index,
 			qs.skill,
@@ -160,6 +163,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, courseID, lessonID,
 		if err := rows.Scan(
 			&set.ID,
 			&set.LessonID,
+			&set.Kind,
 			&set.Title,
 			&set.OrderIndex,
 			&set.Skill,
@@ -194,6 +198,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 		SELECT
 			qs.id,
 			qs.lesson_id,
+			qs.kind,
 			qs.title,
 			qs.order_index,
 			qs.skill,
@@ -223,7 +228,9 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 	err = tx.QueryRow(ctx, setQuery, courseID, lessonID, questionSetID).Scan(
 		&set.ID,
 		&set.LessonID,
+		&set.Kind,
 		&set.Title,
+		&set.OrderIndex,
 		&set.Skill,
 		&set.PassingScore,
 		&configuredQuestionCount,

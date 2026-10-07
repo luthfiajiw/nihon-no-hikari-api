@@ -87,10 +87,11 @@ Content-Type: application/json
 }
 ```
 
-Setiap jawaban wajib menggunakan tepat satu dari `selected_option_id` atau
-`stroke_input`. Semua soal pada attempt harus dijawab dan `question_id` tidak
-boleh duplikat. `stroke_input` harus berupa JSON valid dengan ukuran maksimal
-64 KiB.
+Setiap jawaban yang diisi menggunakan salah satu dari `selected_option_id` atau
+`stroke_input`, dan `question_id` tidak boleh duplikat. `answers` boleh kosong,
+hanya memuat soal yang sudah dijawab, atau memuat soal tanpa jawaban. Soal yang
+tidak dijawab mendapat 0 poin dan tetap masuk ke total bobot penilaian.
+`stroke_input` harus berupa JSON valid dengan ukuran maksimal 64 KiB.
 
 ## Aturan penilaian
 

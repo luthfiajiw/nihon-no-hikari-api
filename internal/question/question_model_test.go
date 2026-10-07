@@ -28,12 +28,13 @@ func TestSubmitAttemptRequestValidate(t *testing.T) {
 	}{
 		{name: "option answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID}}}},
 		{name: "stroke answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &strokeInput}}}},
-		{name: "missing answers", request: SubmitAttemptRequest{}, wantErr: true},
+		{name: "missing answers", request: SubmitAttemptRequest{}},
 		{name: "missing question id", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{StrokeInput: &strokeInput}}}, wantErr: true},
 		{name: "duplicate question", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &strokeInput}, {QuestionID: questionID, SelectedOptionID: &optionID}}}, wantErr: true},
 		{name: "both answer forms", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID, StrokeInput: &strokeInput}}}, wantErr: true},
-		{name: "empty answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID}}}, wantErr: true},
-		{name: "null stroke", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &nullStrokeInput}}}, wantErr: true},
+		{name: "empty answer", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID}}}},
+		{name: "null stroke", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &nullStrokeInput}}}},
+		{name: "nil option id", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: new(uuid.UUID)}}}, wantErr: true},
 		{name: "invalid stroke JSON", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: questionID, StrokeInput: &invalidStrokeInput}}}, wantErr: true},
 		{name: "stroke too large", request: SubmitAttemptRequest{Answers: []SubmitAnswerRequest{{QuestionID: otherQuestionID, StrokeInput: &largeStrokeInput}}}, wantErr: true},
 	}

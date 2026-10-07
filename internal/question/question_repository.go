@@ -566,12 +566,21 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 	}
 	rows.Close()
 
-	if len(questions) == 0 || len(questions) != len(req.Answers) {
+	if len(questions) == 0 {
 		return nil, utils.ErrInvalidAttempt
 	}
 	answerByQuestion := make(map[uuid.UUID]SubmitAnswerRequest, len(req.Answers))
 	for _, answer := range req.Answers {
 		answerByQuestion[answer.QuestionID] = answer
+	}
+	questionIDs := make(map[uuid.UUID]struct{}, len(questions))
+	for _, item := range questions {
+		questionIDs[item.ID] = struct{}{}
+	}
+	for questionID := range answerByQuestion {
+		if _, exists := questionIDs[questionID]; !exists {
+			return nil, utils.ErrInvalidAttempt
+		}
 	}
 
 	results := make([]AnswerResult, 0, len(questions))
@@ -580,17 +589,18 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 	skillTotals := map[Skill]int32{SkillReading: 0, SkillWriting: 0}
 	skillEarned := map[Skill]int32{SkillReading: 0, SkillWriting: 0}
 	for _, item := range questions {
-		answer, exists := answerByQuestion[item.ID]
-		if !exists {
-			return nil, utils.ErrInvalidAttempt
-		}
-		if !item.Skill.IsSupported() || item.Points <= 0 {
+		answer := answerByQuestion[item.ID]
+		if item.QuestionType != QuestionTypeMultipleChoice || !item.Skill.IsSupported() || item.Points <= 0 {
 			return nil, utils.ErrInvalidQuestionConfiguration
 		}
 
-		isCorrect, err := gradeAnswer(ctx, tx, item, answer)
-		if err != nil {
-			return nil, err
+		isCorrect := false
+		if answer.hasResponse() {
+			var err error
+			isCorrect, err = gradeAnswer(ctx, tx, item, answer)
+			if err != nil {
+				return nil, err
+			}
 		}
 		earned := int16(0)
 		if isCorrect {

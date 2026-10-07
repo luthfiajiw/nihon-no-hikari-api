@@ -108,10 +108,6 @@ type SubmitAttemptRequest struct {
 }
 
 func (r SubmitAttemptRequest) Validate() error {
-	if len(r.Answers) == 0 {
-		return errors.New("answers wajib diisi")
-	}
-
 	seen := make(map[uuid.UUID]struct{}, len(r.Answers))
 	for _, answer := range r.Answers {
 		if answer.QuestionID == uuid.Nil {
@@ -123,10 +119,13 @@ func (r SubmitAttemptRequest) Validate() error {
 		seen[answer.QuestionID] = struct{}{}
 
 		hasOption := answer.SelectedOptionID != nil && *answer.SelectedOptionID != uuid.Nil
+		if answer.SelectedOptionID != nil && !hasOption {
+			return errors.New("selected_option_id tidak valid")
+		}
 		trimmedStroke := answer.normalizedStrokeInput()
-		hasStroke := len(trimmedStroke) > 0 && !bytes.Equal(trimmedStroke, []byte("null"))
-		if hasOption == hasStroke {
-			return errors.New("setiap jawaban harus memiliki tepat satu selected_option_id atau stroke_input")
+		hasStroke := len(trimmedStroke) > 0
+		if hasOption && hasStroke {
+			return errors.New("setiap jawaban hanya boleh memiliki salah satu selected_option_id atau stroke_input")
 		}
 		if hasStroke && !json.Valid(trimmedStroke) {
 			return errors.New("stroke_input harus berupa JSON valid")
@@ -148,6 +147,10 @@ func (r SubmitAnswerRequest) normalizedStrokeInput() json.RawMessage {
 		return nil
 	}
 	return trimmed
+}
+
+func (r SubmitAnswerRequest) hasResponse() bool {
+	return r.SelectedOptionID != nil || len(r.normalizedStrokeInput()) > 0
 }
 
 type AnswerResult struct {

@@ -29,33 +29,35 @@ func (r *lessonProgressRepositoryStub) ListLessons(context.Context, uuid.UUID, u
 	return nil, nil
 }
 
-func (r *lessonProgressRepositoryStub) GetLessonDetail(context.Context, uuid.UUID, uuid.UUID) (*model.LessonDetail, error) {
+func (r *lessonProgressRepositoryStub) GetLessonDetail(context.Context, uuid.UUID) (*model.LessonDetail, error) {
 	return r.lesson, nil
 }
 
 type questionRepositoryStub struct {
 	sets             []question.QuestionSet
-	receivedCourseID uuid.UUID
 	receivedLessonID uuid.UUID
 	receivedUserID   uuid.UUID
 }
 
-func (r *questionRepositoryStub) ListQuestionSets(_ context.Context, courseID, lessonID, userID uuid.UUID) ([]question.QuestionSet, error) {
-	r.receivedCourseID = courseID
+func (r *questionRepositoryStub) ListQuestionSets(_ context.Context, lessonID, userID uuid.UUID) ([]question.QuestionSet, error) {
 	r.receivedLessonID = lessonID
 	r.receivedUserID = userID
 	return r.sets, nil
 }
 
-func (r *questionRepositoryStub) GetQuestionSetDetail(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) (*question.QuestionSetDetail, error) {
+func (r *questionRepositoryStub) GetQuestionSetDetail(context.Context, uuid.UUID, uuid.UUID) (*question.QuestionSetDetail, error) {
 	return nil, nil
 }
 
-func (r *questionRepositoryStub) StartAttempt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) (*question.Attempt, error) {
+func (r *questionRepositoryStub) StartAttempt(context.Context, uuid.UUID, uuid.UUID) (*question.Attempt, error) {
 	return nil, nil
 }
 
-func (r *questionRepositoryStub) SubmitAttempt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, question.SubmitAttemptRequest) (*question.AttemptResult, error) {
+func (r *questionRepositoryStub) AbandonAttempt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (r *questionRepositoryStub) SubmitAttempt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, question.SubmitAttemptRequest) (*question.AttemptResult, error) {
 	return nil, nil
 }
 
@@ -63,7 +65,7 @@ func (r *lessonProgressRepositoryStub) UpsertModuleProgress(context.Context, uui
 	return nil, nil
 }
 
-func (r *lessonProgressRepositoryStub) UpsertLessonProgress(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, model.UpsertLessonProgressRequest) (*model.LessonProgress, error) {
+func (r *lessonProgressRepositoryStub) UpsertLessonProgress(context.Context, uuid.UUID, uuid.UUID, model.UpsertLessonProgressRequest) (*model.LessonProgress, error) {
 	r.upsertCalled = true
 	return &model.LessonProgress{}, nil
 }
@@ -73,7 +75,7 @@ func TestUpsertLessonProgressRejectsDirectCompletion(t *testing.T) {
 	service := NewService(repository, nil)
 	status := model.StatusCompleted
 
-	_, err := service.UpsertLessonProgress(context.Background(), uuid.New(), uuid.New(), uuid.New(), model.UpsertLessonProgressRequest{Status: &status})
+	_, err := service.UpsertLessonProgress(context.Background(), uuid.New(), uuid.New(), model.UpsertLessonProgressRequest{Status: &status})
 	if !errors.Is(err, utils.ErrLessonCompletionRequiresQuiz) {
 		t.Fatalf("UpsertLessonProgress() error = %v, want %v", err, utils.ErrLessonCompletionRequiresQuiz)
 	}
@@ -83,7 +85,6 @@ func TestUpsertLessonProgressRejectsDirectCompletion(t *testing.T) {
 }
 
 func TestGetLessonDetailIncludesQuestionSets(t *testing.T) {
-	courseID := uuid.New()
 	lessonID := uuid.New()
 	userID := uuid.New()
 	setID := uuid.New()
@@ -95,14 +96,14 @@ func TestGetLessonDetailIncludesQuestionSets(t *testing.T) {
 	}
 	service := NewService(courseRepository, questionRepository)
 
-	response, err := service.GetLessonDetail(context.Background(), courseID, lessonID, userID)
+	response, err := service.GetLessonDetail(context.Background(), lessonID, userID)
 	if err != nil {
 		t.Fatalf("GetLessonDetail() error = %v", err)
 	}
 	if len(response.Data.QuestionSets) != 1 || response.Data.QuestionSets[0].ID != setID {
 		t.Fatalf("GetLessonDetail() question sets = %#v", response.Data.QuestionSets)
 	}
-	if questionRepository.receivedCourseID != courseID || questionRepository.receivedLessonID != lessonID || questionRepository.receivedUserID != userID {
-		t.Fatal("GetLessonDetail() did not forward course, lesson, and user IDs")
+	if questionRepository.receivedLessonID != lessonID || questionRepository.receivedUserID != userID {
+		t.Fatal("GetLessonDetail() did not forward lesson and user IDs")
 	}
 }

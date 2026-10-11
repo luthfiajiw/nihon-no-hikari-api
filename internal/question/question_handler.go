@@ -20,18 +20,28 @@ func NewHandler(service Service, middleware middleware.Middleware) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
-	group := app.Group("/api/v1/courses", h.middleware.AuthMiddleware())
-	group.Get("/:courseId/lessons/:lessonId/question-sets", h.listQuestionSets)
-	group.Get("/:courseId/lessons/:lessonId/question-sets/:questionSetId", h.getQuestionSetDetail)
-	group.Post("/:courseId/lessons/:lessonId/question-sets/:questionSetId/attempts", h.startAttempt)
-	group.Post("/:courseId/lessons/:lessonId/question-sets/:questionSetId/attempts/:attemptId/submit", h.submitAttempt)
+	group := app.Group("/api/v1/question-sets", h.middleware.AuthMiddleware())
+	group.Get("", h.listQuestionSets)
+	group.Get("/:questionSetId", h.getQuestionSetDetail)
+	group.Post("/:questionSetId/attempts", h.startAttempt)
+	group.Post("/:questionSetId/attempts/:attemptId/abandon", h.abandonAttempt)
+	group.Post("/:questionSetId/attempts/:attemptId/submit", h.submitAttempt)
 }
 
+// getQuestionSetDetail godoc
+// @Summary Detail question set
+// @Description Mengambil detail question set beserta pertanyaannya.
+// @Tags Questions
+// @Produce json
+// @Security BearerAuth
+// @Param questionSetId path string true "Question set ID"
+// @Success 200 {object} QuestionSetDetailResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /question-sets/{questionSetId} [get]
 func (h *Handler) getQuestionSetDetail(c fiber.Ctx) error {
-	courseID, lessonID, err := parseCourseAndLessonIDs(c)
-	if err != nil {
-		return errorJSON(c, fiber.StatusBadRequest, err)
-	}
 	questionSetID, err := uuid.Parse(c.Params("questionSetId"))
 	if err != nil {
 		return errorJSON(c, fiber.StatusBadRequest, errors.New("questionSetId tidak valid"))
@@ -41,7 +51,7 @@ func (h *Handler) getQuestionSetDetail(c fiber.Ctx) error {
 		return errorJSON(c, fiber.StatusUnauthorized, errors.New("user tidak terautentikasi"))
 	}
 
-	res, err := h.service.GetQuestionSetDetail(c.Context(), courseID, lessonID, questionSetID, userID)
+	res, err := h.service.GetQuestionSetDetail(c.Context(), questionSetID, userID)
 	if err != nil {
 		if errors.Is(err, utils.ErrQuestionSetNotFound) {
 			return errorJSON(c, fiber.StatusNotFound, err)
@@ -51,16 +61,29 @@ func (h *Handler) getQuestionSetDetail(c fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
+// listQuestionSets godoc
+// @Summary Daftar question set
+// @Description Mengambil seluruh question set untuk sebuah lesson.
+// @Tags Questions
+// @Produce json
+// @Security BearerAuth
+// @Param lessonId query string true "Lesson ID"
+// @Success 200 {object} ListQuestionSetsResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /question-sets [get]
 func (h *Handler) listQuestionSets(c fiber.Ctx) error {
-	courseID, lessonID, err := parseCourseAndLessonIDs(c)
+	lessonID, err := uuid.Parse(c.Query("lessonId"))
 	if err != nil {
-		return errorJSON(c, fiber.StatusBadRequest, err)
+		return errorJSON(c, fiber.StatusBadRequest, errors.New("lessonId tidak valid"))
 	}
 	userID, ok := c.Locals(utils.UserIDKey).(uuid.UUID)
 	if !ok {
 		return errorJSON(c, fiber.StatusUnauthorized, errors.New("user tidak terautentikasi"))
 	}
-	res, err := h.service.ListQuestionSets(c.Context(), courseID, lessonID, userID)
+	res, err := h.service.ListQuestionSets(c.Context(), lessonID, userID)
 	if err != nil {
 		if errors.Is(err, utils.ErrLessonNotFound) {
 			return errorJSON(c, fiber.StatusNotFound, err)
@@ -70,11 +93,21 @@ func (h *Handler) listQuestionSets(c fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
+// startAttempt godoc
+// @Summary Mulai attempt
+// @Description Membuat attempt baru untuk sebuah question set.
+// @Tags Questions
+// @Produce json
+// @Security BearerAuth
+// @Param questionSetId path string true "Question set ID"
+// @Success 201 {object} StartAttemptResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /question-sets/{questionSetId}/attempts [post]
 func (h *Handler) startAttempt(c fiber.Ctx) error {
-	courseID, lessonID, err := parseCourseAndLessonIDs(c)
-	if err != nil {
-		return errorJSON(c, fiber.StatusBadRequest, err)
-	}
 	questionSetID, err := uuid.Parse(c.Params("questionSetId"))
 	if err != nil {
 		return errorJSON(c, fiber.StatusBadRequest, errors.New("questionSetId tidak valid"))
@@ -84,7 +117,7 @@ func (h *Handler) startAttempt(c fiber.Ctx) error {
 		return errorJSON(c, fiber.StatusUnauthorized, errors.New("user tidak terautentikasi"))
 	}
 
-	res, err := h.service.StartAttempt(c.Context(), courseID, lessonID, questionSetID, userID)
+	res, err := h.service.StartAttempt(c.Context(), questionSetID, userID)
 	if err != nil {
 		switch {
 		case errors.Is(err, utils.ErrQuestionSetNotFound):
@@ -101,11 +134,24 @@ func (h *Handler) startAttempt(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(res)
 }
 
+// submitAttempt godoc
+// @Summary Kirim jawaban attempt
+// @Description Mengirim jawaban, menilai attempt, dan mengembalikan hasilnya.
+// @Tags Questions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param questionSetId path string true "Question set ID"
+// @Param attemptId path string true "Attempt ID"
+// @Param request body SubmitAttemptRequest true "Daftar jawaban"
+// @Success 200 {object} SubmitAttemptResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /question-sets/{questionSetId}/attempts/{attemptId}/submit [post]
 func (h *Handler) submitAttempt(c fiber.Ctx) error {
-	courseID, lessonID, err := parseCourseAndLessonIDs(c)
-	if err != nil {
-		return errorJSON(c, fiber.StatusBadRequest, err)
-	}
 	questionSetID, err := uuid.Parse(c.Params("questionSetId"))
 	if err != nil {
 		return errorJSON(c, fiber.StatusBadRequest, errors.New("questionSetId tidak valid"))
@@ -123,7 +169,7 @@ func (h *Handler) submitAttempt(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return errorJSON(c, fiber.StatusBadRequest, err)
 	}
-	res, err := h.service.SubmitAttempt(c.Context(), courseID, lessonID, questionSetID, attemptID, userID, req)
+	res, err := h.service.SubmitAttempt(c.Context(), questionSetID, attemptID, userID, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, utils.ErrInvalidAttempt):
@@ -139,16 +185,47 @@ func (h *Handler) submitAttempt(c fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
-func parseCourseAndLessonIDs(c fiber.Ctx) (uuid.UUID, uuid.UUID, error) {
-	courseID, err := uuid.Parse(c.Params("courseId"))
+// abandonAttempt godoc
+// @Summary Batalkan attempt
+// @Description Menandai attempt aktif sebagai dibatalkan.
+// @Tags Questions
+// @Produce json
+// @Security BearerAuth
+// @Param questionSetId path string true "Question set ID"
+// @Param attemptId path string true "Attempt ID"
+// @Success 200 {object} AbandonAttemptResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /question-sets/{questionSetId}/attempts/{attemptId}/abandon [post]
+func (h *Handler) abandonAttempt(c fiber.Ctx) error {
+	questionSetID, err := uuid.Parse(c.Params("questionSetId"))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, errors.New("courseId tidak valid")
+		return errorJSON(c, fiber.StatusBadRequest, errors.New("questionSetId tidak valid"))
 	}
-	lessonID, err := uuid.Parse(c.Params("lessonId"))
+	attemptID, err := uuid.Parse(c.Params("attemptId"))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, errors.New("lessonId tidak valid")
+		return errorJSON(c, fiber.StatusBadRequest, errors.New("attemptId tidak valid"))
 	}
-	return courseID, lessonID, nil
+	userID, ok := c.Locals(utils.UserIDKey).(uuid.UUID)
+	if !ok {
+		return errorJSON(c, fiber.StatusUnauthorized, errors.New("user tidak terautentikasi"))
+	}
+
+	res, err := h.service.AbandonAttempt(c.Context(), questionSetID, attemptID, userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, utils.ErrAttemptNotFound):
+			return errorJSON(c, fiber.StatusNotFound, err)
+		case errors.Is(err, utils.ErrAttemptAlreadySubmitted):
+			return errorJSON(c, fiber.StatusConflict, err)
+		default:
+			return errorJSON(c, fiber.StatusInternalServerError, err)
+		}
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func errorJSON(c fiber.Ctx, status int, err error) error {

@@ -97,6 +97,11 @@ type StartAttemptResponse struct {
 	Data    Attempt `json:"data"`
 }
 
+type AbandonAttemptResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
 type SubmitAnswerRequest struct {
 	QuestionID       uuid.UUID        `json:"question_id"`
 	SelectedOptionID *uuid.UUID       `json:"selected_option_id"`

@@ -15,34 +15,33 @@ type Repository interface {
 	List(ctx context.Context) ([]model.Course, error)
 	GetCourseDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetail, error)
 	ListLessons(ctx context.Context, courseID, userID uuid.UUID) ([]model.ModuleLesson, error)
-	GetLessonDetail(ctx context.Context, courseID, lessonID uuid.UUID) (*model.LessonDetail, error)
+	GetLessonDetail(ctx context.Context, lessonID uuid.UUID) (*model.LessonDetail, error)
 	UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgress, error)
-	UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error)
+	UpsertLessonProgress(ctx context.Context, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error)
 }
 
-func (r *dbRepository) UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error) {
+func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error) {
 	const prerequisiteQuery = `
 		SELECT NOT EXISTS (
 			SELECT 1
 			FROM lesson_prerequisites lp
 			LEFT JOIN user_lesson_progress prerequisite_progress
 				ON prerequisite_progress.lesson_id = lp.required_lesson_id
-				AND prerequisite_progress.user_id = $3
+				AND prerequisite_progress.user_id = $2
 			WHERE lp.lesson_id = ls.id
 				AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
 		)
 		FROM lessons ls
 		JOIN modules m ON m.id = ls.module_id
 		JOIN courses c ON c.id = m.course_id
-		WHERE ls.id = $2
-			AND c.id = $1
+		WHERE ls.id = $1
 			AND ls.is_published = true
 			AND m.is_published = true
 			AND c.is_published = true
 	`
 
 	var prerequisitesCompleted bool
-	if err := r.pool.QueryRow(ctx, prerequisiteQuery, courseID, lessonID, userID).Scan(&prerequisitesCompleted); err != nil {
+	if err := r.pool.QueryRow(ctx, prerequisiteQuery, lessonID, userID).Scan(&prerequisitesCompleted); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, utils.ErrLessonNotFound
 		}
@@ -59,25 +58,24 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, courseID, lesso
 		SELECT
 			$1,
 			ls.id,
-			$4::progress_status,
-			CASE WHEN $4::progress_status = 'completed' THEN now() END,
+			$3::progress_status,
+			CASE WHEN $3::progress_status = 'completed' THEN now() END,
 			now()
 		FROM lessons ls
 		JOIN modules m ON m.id = ls.module_id
 		JOIN courses c ON c.id = m.course_id
 		WHERE ls.id = $2
-			AND c.id = $3
 			AND ls.is_published = true
 			AND m.is_published = true
 			AND c.is_published = true
 		ON CONFLICT (user_id, lesson_id) DO UPDATE SET
 			status = CASE
 				WHEN progress.status = 'completed' THEN progress.status
-				ELSE $4::progress_status
+				ELSE $3::progress_status
 			END,
 			completed_at = CASE
 				WHEN progress.status = 'completed' THEN progress.completed_at
-				WHEN $4::progress_status = 'completed' THEN COALESCE(progress.completed_at, now())
+				WHEN $3::progress_status = 'completed' THEN COALESCE(progress.completed_at, now())
 				ELSE NULL
 			END,
 			updated_at = now()
@@ -85,7 +83,7 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, courseID, lesso
 	`
 
 	var progress model.LessonProgress
-	err := r.pool.QueryRow(ctx, query, userID, lessonID, courseID, req.Status).Scan(
+	err := r.pool.QueryRow(ctx, query, userID, lessonID, req.Status).Scan(
 		&progress.UserID,
 		&progress.LessonID,
 		&progress.Status,
@@ -248,7 +246,7 @@ func (r *dbRepository) GetCourseDetail(ctx context.Context, courseID, userID uui
 	return &course, nil
 }
 
-func (r *dbRepository) GetLessonDetail(ctx context.Context, courseID, lessonID uuid.UUID) (*model.LessonDetail, error) {
+func (r *dbRepository) GetLessonDetail(ctx context.Context, lessonID uuid.UUID) (*model.LessonDetail, error) {
 	const query = `
 		SELECT
 			ls.id,
@@ -258,15 +256,14 @@ func (r *dbRepository) GetLessonDetail(ctx context.Context, courseID, lessonID u
 		FROM lessons ls
 		JOIN modules m ON m.id = ls.module_id
 		JOIN courses c ON c.id = m.course_id
-		WHERE c.id = $1
-			AND ls.id = $2
+		WHERE ls.id = $1
 			AND c.is_published = true
 			AND m.is_published = true
 			AND ls.is_published = true
 	`
 
 	var lesson model.LessonDetail
-	if err := r.pool.QueryRow(ctx, query, courseID, lessonID).Scan(
+	if err := r.pool.QueryRow(ctx, query, lessonID).Scan(
 		&lesson.ID,
 		&lesson.Slug,
 		&lesson.Title,

@@ -27,6 +27,16 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	authGroup.Post("/signout", h.signout)
 }
 
+// register godoc
+// @Summary Registrasi akun
+// @Description Membuat akun pengguna baru.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body RegisterRequest true "Data registrasi"
+// @Success 201 {object} utils.SuccessRes
+// @Failure 400 {object} utils.ErrorRes
+// @Router /auth/register [post]
 func (h *Handler) register(c fiber.Ctx) error {
 	var req RegisterRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -75,6 +85,19 @@ func (h *Handler) register(c fiber.Ctx) error {
 	})
 }
 
+// signIn godoc
+// @Summary Masuk
+// @Description Mengautentikasi pengguna dan membuat sesi baru.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body SignInRequest true "Kredensial pengguna"
+// @Success 200 {object} SignInResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /auth/signin [post]
 func (h *Handler) signIn(c fiber.Ctx) error {
 	var req SignInRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -106,6 +129,18 @@ func (h *Handler) signIn(c fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
+// token godoc
+// @Summary Perbarui access token
+// @Description Membuat access token baru menggunakan refresh token.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body TokenRequest true "Refresh token"
+// @Success 200 {object} RefreshTokenResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /auth/token [post]
 func (h *Handler) token(c fiber.Ctx) error {
 	var req TokenRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -146,6 +181,18 @@ func (h *Handler) token(c fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
+// signout godoc
+// @Summary Keluar
+// @Description Menutup sesi pengguna berdasarkan session ID.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body LogoutRequest true "Sesi yang akan ditutup"
+// @Success 200 {object} utils.SuccessRes
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /auth/signout [post]
 func (h *Handler) signout(c fiber.Ctx) error {
 	var req LogoutRequest
 	if err := c.Bind().Body(&req); err != nil {

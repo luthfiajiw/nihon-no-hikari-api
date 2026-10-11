@@ -14,12 +14,12 @@ type Service interface {
 	GetList(ctx context.Context) (*model.ListCourseResponse, error)
 	GetDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetailResponse, error)
 	GetLessons(ctx context.Context, courseID, userID uuid.UUID) (*model.ListLessonResponse, error)
-	GetLessonDetail(ctx context.Context, courseID, lessonID, userID uuid.UUID) (*model.LessonDetailResponse, error)
+	GetLessonDetail(ctx context.Context, lessonID, userID uuid.UUID) (*model.LessonDetailResponse, error)
 	UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgressResponse, error)
-	UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgressResponse, error)
+	UpsertLessonProgress(ctx context.Context, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgressResponse, error)
 }
 
-func (s *service) UpsertLessonProgress(ctx context.Context, courseID, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgressResponse, error) {
+func (s *service) UpsertLessonProgress(ctx context.Context, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgressResponse, error) {
 	if err := req.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %v", utils.ErrInvalidLessonProgress, err)
 	}
@@ -27,7 +27,7 @@ func (s *service) UpsertLessonProgress(ctx context.Context, courseID, lessonID, 
 		return nil, utils.ErrLessonCompletionRequiresQuiz
 	}
 
-	progress, err := s.repository.UpsertLessonProgress(ctx, courseID, lessonID, userID, req)
+	progress, err := s.repository.UpsertLessonProgress(ctx, lessonID, userID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -69,12 +69,12 @@ func (s *service) GetDetail(ctx context.Context, courseID, userID uuid.UUID) (*m
 	}, nil
 }
 
-func (s *service) GetLessonDetail(ctx context.Context, courseID, lessonID, userID uuid.UUID) (*model.LessonDetailResponse, error) {
-	lesson, err := s.repository.GetLessonDetail(ctx, courseID, lessonID)
+func (s *service) GetLessonDetail(ctx context.Context, lessonID, userID uuid.UUID) (*model.LessonDetailResponse, error) {
+	lesson, err := s.repository.GetLessonDetail(ctx, lessonID)
 	if err != nil {
 		return nil, err
 	}
-	questionSets, err := s.questionRepository.ListQuestionSets(ctx, courseID, lessonID, userID)
+	questionSets, err := s.questionRepository.ListQuestionSets(ctx, lessonID, userID)
 	if err != nil {
 		return nil, err
 	}

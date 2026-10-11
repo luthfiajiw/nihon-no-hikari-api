@@ -22,7 +22,7 @@ Setiap question wajib mempunyai `prompt_text` dan minimal salah satu dari
 ## 1. Daftar question set
 
 ```http
-GET /api/v1/courses/{courseId}/lessons/{lessonId}/question-sets
+GET /api/v1/question-sets?lessonId={lessonId}
 ```
 
 Respons berisi `kind`, konfigurasi kelulusan, jumlah soal efektif, `order_index`,
@@ -34,7 +34,7 @@ dikembalikan.
 ## 2. Detail question set
 
 ```http
-GET /api/v1/courses/{courseId}/lessons/{lessonId}/question-sets/{questionSetId}
+GET /api/v1/question-sets/{questionSetId}
 ```
 
 Respons berisi metadata question set, seluruh `questions`, stimulus, dan
@@ -63,7 +63,7 @@ Contoh question:
 ## 3. Mulai attempt
 
 ```http
-POST /api/v1/courses/{courseId}/lessons/{lessonId}/question-sets/{questionSetId}/attempts
+POST /api/v1/question-sets/{questionSetId}/attempts
 ```
 
 Endpoint membuat attempt dan mengembalikan soal beserta stimulus dan opsi tanpa
@@ -74,7 +74,7 @@ batas waktu.
 ## 4. Submit attempt
 
 ```http
-POST /api/v1/courses/{courseId}/lessons/{lessonId}/question-sets/{questionSetId}/attempts/{attemptId}/submit
+POST /api/v1/question-sets/{questionSetId}/attempts/{attemptId}/submit
 Content-Type: application/json
 
 {
@@ -92,6 +92,19 @@ Setiap jawaban yang diisi menggunakan salah satu dari `selected_option_id` atau
 hanya memuat soal yang sudah dijawab, atau memuat soal tanpa jawaban. Soal yang
 tidak dijawab mendapat 0 poin dan tetap masuk ke total bobot penilaian.
 `stroke_input` harus berupa JSON valid dengan ukuran maksimal 64 KiB.
+
+## 5. Abandon attempt
+
+```http
+POST /api/v1/question-sets/{questionSetId}/attempts/{attemptId}/abandon
+```
+
+Endpoint ini dipanggil ketika pengguna meninggalkan halaman test sebelum submit.
+Attempt harus dimiliki oleh pengguna yang sedang aktif dan masih berstatus
+`in_progress`. Pemanggilan ulang untuk attempt yang sudah `abandoned` tetap
+berhasil (idempotent), sedangkan attempt yang sudah `submitted` menghasilkan
+`409 Conflict`. Attempt abandoned tidak dihitung dalam `attempts_used`, batas
+`max_attempts`, maupun cooldown.
 
 ## Aturan penilaian
 

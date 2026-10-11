@@ -13,13 +13,14 @@ import (
 )
 
 type Repository interface {
-	ListQuestionSets(ctx context.Context, courseID, lessonID, userID uuid.UUID) ([]QuestionSet, error)
-	GetQuestionSetDetail(ctx context.Context, courseID, lessonID, questionSetID, userID uuid.UUID) (*QuestionSetDetail, error)
-	StartAttempt(ctx context.Context, courseID, lessonID, questionSetID, userID uuid.UUID) (*Attempt, error)
-	SubmitAttempt(ctx context.Context, courseID, lessonID, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*AttemptResult, error)
+	ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) ([]QuestionSet, error)
+	GetQuestionSetDetail(ctx context.Context, questionSetID, userID uuid.UUID) (*QuestionSetDetail, error)
+	StartAttempt(ctx context.Context, questionSetID, userID uuid.UUID) (*Attempt, error)
+	AbandonAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID) error
+	SubmitAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*AttemptResult, error)
 }
 
-func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, courseID, lessonID, questionSetID, userID uuid.UUID) (*QuestionSetDetail, error) {
+func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, questionSetID, userID uuid.UUID) (*QuestionSetDetail, error) {
 	const query = `
 		SELECT
 			qs.id,
@@ -39,19 +40,17 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, courseID, lesso
 			qs.shuffle_questions,
 			EXISTS (
 				SELECT 1 FROM attempts a
-				WHERE a.question_set_id = qs.id AND a.user_id = $4 AND a.is_passed = true
+				WHERE a.question_set_id = qs.id AND a.user_id = $2 AND a.is_passed = true
 			),
 			(
 				SELECT COUNT(*)::integer FROM attempts a
-				WHERE a.question_set_id = qs.id AND a.user_id = $4 AND a.status <> 'abandoned'
+				WHERE a.question_set_id = qs.id AND a.user_id = $2 AND a.status <> 'abandoned'
 			)
 		FROM question_sets qs
 		JOIN lessons ls ON ls.id = qs.lesson_id
 		JOIN modules m ON m.id = ls.module_id
 		JOIN courses c ON c.id = m.course_id
-		WHERE c.id = $1
-			AND ls.id = $2
-			AND qs.id = $3
+		WHERE qs.id = $1
 			AND qs.kind = 'practice'
 			AND qs.is_published = true
 			AND c.is_published = true
@@ -60,7 +59,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, courseID, lesso
 	`
 
 	detail := &QuestionSetDetail{}
-	err := r.pool.QueryRow(ctx, query, courseID, lessonID, questionSetID, userID).Scan(
+	err := r.pool.QueryRow(ctx, query, questionSetID, userID).Scan(
 		&detail.ID,
 		&detail.LessonID,
 		&detail.Kind,
@@ -98,14 +97,14 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 	return &dbRepository{pool: pool}
 }
 
-func (r *dbRepository) ListQuestionSets(ctx context.Context, courseID, lessonID, userID uuid.UUID) ([]QuestionSet, error) {
+func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) ([]QuestionSet, error) {
 	const lessonQuery = `
 		SELECT EXISTS (
 			SELECT 1
 			FROM lessons ls
 			JOIN modules m ON m.id = ls.module_id
 			JOIN courses c ON c.id = m.course_id
-			WHERE c.id = $1 AND ls.id = $2
+			WHERE ls.id = $1
 				AND c.is_published = true
 				AND m.is_published = true
 				AND ls.is_published = true
@@ -113,7 +112,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, courseID, lessonID,
 	`
 
 	var lessonExists bool
-	if err := r.pool.QueryRow(ctx, lessonQuery, courseID, lessonID).Scan(&lessonExists); err != nil {
+	if err := r.pool.QueryRow(ctx, lessonQuery, lessonID).Scan(&lessonExists); err != nil {
 		return nil, err
 	}
 	if !lessonExists {
@@ -187,7 +186,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, courseID, lessonID,
 	return sets, nil
 }
 
-func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, questionSetID, userID uuid.UUID) (*Attempt, error) {
+func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID uuid.UUID) (*Attempt, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -212,9 +211,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 		JOIN lessons ls ON ls.id = qs.lesson_id
 		JOIN modules m ON m.id = ls.module_id
 		JOIN courses c ON c.id = m.course_id
-		WHERE c.id = $1
-			AND ls.id = $2
-			AND qs.id = $3
+		WHERE qs.id = $1
 			AND qs.kind = 'practice'
 			AND qs.is_published = true
 			AND c.is_published = true
@@ -225,7 +222,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 
 	var set QuestionSet
 	var configuredQuestionCount *int16
-	err = tx.QueryRow(ctx, setQuery, courseID, lessonID, questionSetID).Scan(
+	err = tx.QueryRow(ctx, setQuery, questionSetID).Scan(
 		&set.ID,
 		&set.LessonID,
 		&set.Kind,
@@ -271,7 +268,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 		)
 	`
 	var prerequisitesCompleted bool
-	if err := tx.QueryRow(ctx, prerequisiteQuery, lessonID, userID).Scan(&prerequisitesCompleted); err != nil {
+	if err := tx.QueryRow(ctx, prerequisiteQuery, set.LessonID, userID).Scan(&prerequisitesCompleted); err != nil {
 		return nil, err
 	}
 	if !prerequisitesCompleted {
@@ -279,15 +276,19 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 	}
 
 	const attemptStatsQuery = `
-		SELECT COUNT(*)::integer, MAX(submitted_at), COALESCE(bool_or(is_passed), false)
+		SELECT
+			COUNT(*) FILTER (WHERE status <> 'abandoned')::integer,
+			MAX(submitted_at) FILTER (WHERE status <> 'abandoned'),
+			COALESCE(bool_or(is_passed) FILTER (WHERE status <> 'abandoned'), false),
+			COALESCE(MAX(attempt_number), 0)::smallint
 		FROM attempts
 		WHERE user_id = $1
 			AND question_set_id = $2
-			AND status <> 'abandoned'
 	`
 	var attemptCount int32
 	var lastSubmittedAt *time.Time
-	if err := tx.QueryRow(ctx, attemptStatsQuery, userID, questionSetID).Scan(&attemptCount, &lastSubmittedAt, &set.IsPassed); err != nil {
+	var lastAttemptNumber int16
+	if err := tx.QueryRow(ctx, attemptStatsQuery, userID, questionSetID).Scan(&attemptCount, &lastSubmittedAt, &set.IsPassed, &lastAttemptNumber); err != nil {
 		return nil, err
 	}
 	set.AttemptsUsed = attemptCount
@@ -322,7 +323,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 		RETURNING id, status, started_at
 	`
 	attempt := &Attempt{
-		Number:      int16(attemptCount + 1),
+		Number:      lastAttemptNumber + 1,
 		QuestionSet: set,
 		Questions:   questions,
 	}
@@ -349,6 +350,43 @@ func (r *dbRepository) StartAttempt(ctx context.Context, courseID, lessonID, que
 		return nil, err
 	}
 	return attempt, nil
+}
+
+func (r *dbRepository) AbandonAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const attemptQuery = `
+		SELECT a.status
+		FROM attempts a
+		JOIN question_sets qs ON qs.id = a.question_set_id
+		WHERE a.id = $1
+			AND a.user_id = $2
+			AND qs.id = $3
+			AND qs.kind = 'practice'
+		FOR UPDATE OF a
+	`
+	var status string
+	err = tx.QueryRow(ctx, attemptQuery, attemptID, userID, questionSetID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return utils.ErrAttemptNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if status == "submitted" {
+		return utils.ErrAttemptAlreadySubmitted
+	}
+	if status == "in_progress" {
+		if _, err := tx.Exec(ctx, `UPDATE attempts SET status = 'abandoned' WHERE id = $1`, attemptID); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUID, limit int32, shuffle bool) ([]Question, error) {
@@ -491,7 +529,7 @@ type gradingQuestion struct {
 	Points       int16
 }
 
-func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*AttemptResult, error) {
+func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*AttemptResult, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -499,7 +537,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	const attemptQuery = `
-		SELECT a.status, a.started_at, qs.passing_score, qs.time_limit_seconds
+		SELECT a.status, a.started_at, qs.lesson_id, qs.passing_score, qs.time_limit_seconds
 		FROM attempts a
 		JOIN question_sets qs ON qs.id = a.question_set_id
 		JOIN lessons ls ON ls.id = qs.lesson_id
@@ -508,8 +546,6 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 		WHERE a.id = $1
 			AND a.user_id = $2
 			AND qs.id = $3
-			AND ls.id = $4
-			AND c.id = $5
 			AND qs.kind = 'practice'
 			AND qs.is_published = true
 			AND ls.is_published = true
@@ -519,11 +555,13 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, courseID, lessonID, qu
 	`
 	var status string
 	var startedAt time.Time
+	var lessonID uuid.UUID
 	var passingScore int16
 	var timeLimitSeconds *int32
-	err = tx.QueryRow(ctx, attemptQuery, attemptID, userID, questionSetID, lessonID, courseID).Scan(
+	err = tx.QueryRow(ctx, attemptQuery, attemptID, userID, questionSetID).Scan(
 		&status,
 		&startedAt,
+		&lessonID,
 		&passingScore,
 		&timeLimitSeconds,
 	)

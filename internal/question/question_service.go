@@ -10,14 +10,15 @@ import (
 )
 
 type Service interface {
-	ListQuestionSets(ctx context.Context, courseID, lessonID, userID uuid.UUID) (*ListQuestionSetsResponse, error)
-	GetQuestionSetDetail(ctx context.Context, courseID, lessonID, questionSetID, userID uuid.UUID) (*QuestionSetDetailResponse, error)
-	StartAttempt(ctx context.Context, courseID, lessonID, questionSetID, userID uuid.UUID) (*StartAttemptResponse, error)
-	SubmitAttempt(ctx context.Context, courseID, lessonID, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*SubmitAttemptResponse, error)
+	ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) (*ListQuestionSetsResponse, error)
+	GetQuestionSetDetail(ctx context.Context, questionSetID, userID uuid.UUID) (*QuestionSetDetailResponse, error)
+	StartAttempt(ctx context.Context, questionSetID, userID uuid.UUID) (*StartAttemptResponse, error)
+	AbandonAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID) (*AbandonAttemptResponse, error)
+	SubmitAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*SubmitAttemptResponse, error)
 }
 
-func (s *service) GetQuestionSetDetail(ctx context.Context, courseID, lessonID, questionSetID, userID uuid.UUID) (*QuestionSetDetailResponse, error) {
-	detail, err := s.repository.GetQuestionSetDetail(ctx, courseID, lessonID, questionSetID, userID)
+func (s *service) GetQuestionSetDetail(ctx context.Context, questionSetID, userID uuid.UUID) (*QuestionSetDetailResponse, error) {
+	detail, err := s.repository.GetQuestionSetDetail(ctx, questionSetID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +37,8 @@ func NewService(repository Repository) Service {
 	return &service{repository: repository}
 }
 
-func (s *service) ListQuestionSets(ctx context.Context, courseID, lessonID, userID uuid.UUID) (*ListQuestionSetsResponse, error) {
-	sets, err := s.repository.ListQuestionSets(ctx, courseID, lessonID, userID)
+func (s *service) ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) (*ListQuestionSetsResponse, error) {
+	sets, err := s.repository.ListQuestionSets(ctx, lessonID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -48,8 +49,8 @@ func (s *service) ListQuestionSets(ctx context.Context, courseID, lessonID, user
 	}, nil
 }
 
-func (s *service) StartAttempt(ctx context.Context, courseID, lessonID, questionSetID, userID uuid.UUID) (*StartAttemptResponse, error) {
-	attempt, err := s.repository.StartAttempt(ctx, courseID, lessonID, questionSetID, userID)
+func (s *service) StartAttempt(ctx context.Context, questionSetID, userID uuid.UUID) (*StartAttemptResponse, error) {
+	attempt, err := s.repository.StartAttempt(ctx, questionSetID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,11 +61,21 @@ func (s *service) StartAttempt(ctx context.Context, courseID, lessonID, question
 	}, nil
 }
 
-func (s *service) SubmitAttempt(ctx context.Context, courseID, lessonID, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*SubmitAttemptResponse, error) {
+func (s *service) AbandonAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID) (*AbandonAttemptResponse, error) {
+	if err := s.repository.AbandonAttempt(ctx, questionSetID, attemptID, userID); err != nil {
+		return nil, err
+	}
+	return &AbandonAttemptResponse{
+		Success: true,
+		Message: "attempt berhasil ditinggalkan",
+	}, nil
+}
+
+func (s *service) SubmitAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*SubmitAttemptResponse, error) {
 	if err := req.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %v", utils.ErrInvalidAttempt, err)
 	}
-	result, err := s.repository.SubmitAttempt(ctx, courseID, lessonID, questionSetID, attemptID, userID, req)
+	result, err := s.repository.SubmitAttempt(ctx, questionSetID, attemptID, userID, req)
 	if err != nil {
 		return nil, err
 	}

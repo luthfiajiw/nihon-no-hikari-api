@@ -1,0 +1,1221 @@
+basePath: /api/v1
+definitions:
+  internal_auth.AuthSession:
+    properties:
+      access_token:
+        type: string
+      access_token_expires_at:
+        type: string
+      id:
+        type: string
+      refresh_token:
+        type: string
+      refresh_token_expires_at:
+        type: string
+    type: object
+  internal_auth.LogoutRequest:
+    properties:
+      session_id:
+        type: string
+    required:
+    - session_id
+    type: object
+  internal_auth.RefreshTokenResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_auth.AuthSession'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  internal_auth.RegisterRequest:
+    properties:
+      confirm_password:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  internal_auth.SignInData:
+    properties:
+      avatar_url:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      session:
+        $ref: '#/definitions/internal_auth.AuthSession'
+    type: object
+  internal_auth.SignInRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  internal_auth.SignInResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_auth.SignInData'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  internal_auth.TokenRequest:
+    properties:
+      grant_type:
+        type: string
+      token:
+        type: string
+    required:
+    - grant_type
+    - token
+    type: object
+  internal_question.AbandonAttemptResponse:
+    properties:
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  internal_question.AnswerResult:
+    properties:
+      earned_points:
+        type: integer
+      explanation:
+        type: string
+      is_correct:
+        type: boolean
+      max_points:
+        type: integer
+      question_id:
+        type: string
+      skill:
+        $ref: '#/definitions/internal_question.Skill'
+    type: object
+  internal_question.Attempt:
+    properties:
+      attempt_number:
+        type: integer
+      expires_at:
+        type: string
+      id:
+        type: string
+      question_set:
+        $ref: '#/definitions/internal_question.QuestionSet'
+      questions:
+        items:
+          $ref: '#/definitions/internal_question.Question'
+        type: array
+      started_at:
+        type: string
+      status:
+        type: string
+    type: object
+  internal_question.AttemptResult:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/internal_question.AnswerResult'
+        type: array
+      attempt_id:
+        type: string
+      earned_points:
+        type: integer
+      is_passed:
+        type: boolean
+      lesson_status:
+        type: string
+      passing_score:
+        type: integer
+      score:
+        type: integer
+      skills:
+        items:
+          $ref: '#/definitions/internal_question.SkillResult'
+        type: array
+      submitted_at:
+        type: string
+      total_points:
+        type: integer
+    type: object
+  internal_question.ListQuestionSetsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_question.QuestionSet'
+        type: array
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  internal_question.Question:
+    properties:
+      id:
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/internal_question.QuestionOption'
+        type: array
+      order_index:
+        type: integer
+      points:
+        type: integer
+      prompt_text:
+        type: string
+      question_type:
+        $ref: '#/definitions/internal_question.QuestionType'
+      skill:
+        $ref: '#/definitions/internal_question.Skill'
+      stimulus_media_url:
+        type: string
+      stimulus_text:
+        type: string
+    type: object
+  internal_question.QuestionOption:
+    properties:
+      id:
+        type: string
+      label:
+        type: string
+      media_url:
+        type: string
+      order_index:
+        type: integer
+    type: object
+  internal_question.QuestionSet:
+    properties:
+      attempts_used:
+        type: integer
+      cooldown_minutes:
+        type: integer
+      id:
+        type: string
+      is_passed:
+        type: boolean
+      kind:
+        $ref: '#/definitions/internal_question.QuestionSetKind'
+      lesson_id:
+        type: string
+      max_attempts:
+        type: integer
+      order_index:
+        type: integer
+      passing_score:
+        type: integer
+      question_count:
+        type: integer
+      shuffle_questions:
+        type: boolean
+      skill:
+        $ref: '#/definitions/internal_question.Skill'
+      time_limit_seconds:
+        type: integer
+      title:
+        type: string
+    type: object
+  internal_question.QuestionSetDetail:
+    properties:
+      attempts_used:
+        type: integer
+      cooldown_minutes:
+        type: integer
+      id:
+        type: string
+      is_passed:
+        type: boolean
+      kind:
+        $ref: '#/definitions/internal_question.QuestionSetKind'
+      lesson_id:
+        type: string
+      max_attempts:
+        type: integer
+      order_index:
+        type: integer
+      passing_score:
+        type: integer
+      question_count:
+        type: integer
+      questions:
+        items:
+          $ref: '#/definitions/internal_question.Question'
+        type: array
+      shuffle_questions:
+        type: boolean
+      skill:
+        $ref: '#/definitions/internal_question.Skill'
+      time_limit_seconds:
+        type: integer
+      title:
+        type: string
+    type: object
+  internal_question.QuestionSetDetailResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_question.QuestionSetDetail'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  internal_question.QuestionSetKind:
+    enum:
+    - practice
+    - final_exam
+    type: string
+    x-enum-varnames:
+    - QuestionSetKindPractice
+    - QuestionSetKindFinalExam
+  internal_question.QuestionType:
+    enum:
+    - multiple_choice
+    - stroke_writing
+    type: string
+    x-enum-varnames:
+    - QuestionTypeMultipleChoice
+    - QuestionTypeStrokeWriting
+  internal_question.Skill:
+    enum:
+    - reading
+    - writing
+    type: string
+    x-enum-varnames:
+    - SkillReading
+    - SkillWriting
+  internal_question.SkillResult:
+    properties:
+      earned_points:
+        type: integer
+      is_passed:
+        type: boolean
+      score:
+        type: integer
+      skill:
+        $ref: '#/definitions/internal_question.Skill'
+      total_points:
+        type: integer
+    type: object
+  internal_question.StartAttemptResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_question.Attempt'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  internal_question.SubmitAnswerRequest:
+    properties:
+      question_id:
+        type: string
+      selected_option_id:
+        type: string
+      stroke_input:
+        items:
+          type: integer
+        type: array
+    type: object
+  internal_question.SubmitAttemptRequest:
+    properties:
+      answers:
+        items:
+          $ref: '#/definitions/internal_question.SubmitAnswerRequest'
+        type: array
+    type: object
+  internal_question.SubmitAttemptResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_question.AttemptResult'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  nihon-no-hikari-api_internal_course_model.Course:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      level:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.CourseLevel'
+      slug:
+        type: string
+      thumbnail_url:
+        type: string
+      title:
+        type: string
+      total_lessons:
+        type: integer
+      total_minutes:
+        type: integer
+    type: object
+  nihon-no-hikari-api_internal_course_model.CourseDetail:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      level:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.CourseLevel'
+      modules:
+        items:
+          $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Module'
+        type: array
+      slug:
+        type: string
+      thumbnail_url:
+        type: string
+      title:
+        type: string
+      total_lessons:
+        type: integer
+      total_minutes:
+        type: integer
+    type: object
+  nihon-no-hikari-api_internal_course_model.CourseDetailResponse:
+    properties:
+      data:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.CourseDetail'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  nihon-no-hikari-api_internal_course_model.CourseLevel:
+    properties:
+      code:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  nihon-no-hikari-api_internal_course_model.Lesson:
+    properties:
+      id:
+        type: string
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Status'
+      title:
+        type: string
+    type: object
+  nihon-no-hikari-api_internal_course_model.LessonDetail:
+    properties:
+      content:
+        type: string
+      id:
+        type: string
+      question_sets:
+        items:
+          $ref: '#/definitions/nihon-no-hikari-api_internal_question.QuestionSet'
+        type: array
+      slug:
+        type: string
+      title:
+        type: string
+    type: object
+  nihon-no-hikari-api_internal_course_model.LessonDetailResponse:
+    properties:
+      data:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.LessonDetail'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  nihon-no-hikari-api_internal_course_model.LessonProgress:
+    properties:
+      completed_at:
+        type: string
+      lesson_id:
+        type: string
+      status:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Status'
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  nihon-no-hikari-api_internal_course_model.LessonProgressResponse:
+    properties:
+      data:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.LessonProgress'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  nihon-no-hikari-api_internal_course_model.ListCourseResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Course'
+        type: array
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  nihon-no-hikari-api_internal_course_model.ListLessonResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.ModuleLesson'
+        type: array
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  nihon-no-hikari-api_internal_course_model.Module:
+    properties:
+      description:
+        type: string
+      estimated_minutes:
+        type: integer
+      id:
+        type: string
+      is_entry:
+        type: boolean
+      is_mandatory:
+        type: boolean
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Status'
+      title:
+        type: string
+    type: object
+  nihon-no-hikari-api_internal_course_model.ModuleLesson:
+    properties:
+      lessons:
+        items:
+          $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Lesson'
+        type: array
+      module:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Module'
+    type: object
+  nihon-no-hikari-api_internal_course_model.ModuleProgress:
+    properties:
+      best_score:
+        type: integer
+      completed_at:
+        type: string
+      module_id:
+        type: string
+      status:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Status'
+      unlocked_at:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  nihon-no-hikari-api_internal_course_model.ModuleProgressResponse:
+    properties:
+      data:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.ModuleProgress'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  nihon-no-hikari-api_internal_course_model.Status:
+    enum:
+    - locked
+    - unlocked
+    - in_progress
+    - completed
+    type: string
+    x-enum-varnames:
+    - StatusLocked
+    - StatusUnlocked
+    - StatusInProgress
+    - StatusCompleted
+  nihon-no-hikari-api_internal_course_model.UpsertLessonProgressRequest:
+    properties:
+      status:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Status'
+    type: object
+  nihon-no-hikari-api_internal_course_model.UpsertModuleProgressRequest:
+    properties:
+      best_score:
+        type: integer
+      status:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.Status'
+    type: object
+  nihon-no-hikari-api_internal_question.QuestionSet:
+    properties:
+      attempts_used:
+        type: integer
+      cooldown_minutes:
+        type: integer
+      id:
+        type: string
+      is_passed:
+        type: boolean
+      kind:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_question.QuestionSetKind'
+      lesson_id:
+        type: string
+      max_attempts:
+        type: integer
+      order_index:
+        type: integer
+      passing_score:
+        type: integer
+      question_count:
+        type: integer
+      shuffle_questions:
+        type: boolean
+      skill:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_question.Skill'
+      time_limit_seconds:
+        type: integer
+      title:
+        type: string
+    type: object
+  nihon-no-hikari-api_internal_question.QuestionSetKind:
+    enum:
+    - practice
+    - final_exam
+    type: string
+    x-enum-varnames:
+    - QuestionSetKindPractice
+    - QuestionSetKindFinalExam
+  nihon-no-hikari-api_internal_question.Skill:
+    enum:
+    - reading
+    - writing
+    type: string
+    x-enum-varnames:
+    - SkillReading
+    - SkillWriting
+  nihon-no-hikari-api_pkg_utils.ErrorRes:
+    properties:
+      error:
+        type: string
+      success:
+        type: boolean
+    type: object
+  nihon-no-hikari-api_pkg_utils.SuccessRes:
+    properties:
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+info:
+  contact: {}
+  description: REST API untuk platform pembelajaran Nihon no Hikari.
+  title: Nihon no Hikari API
+  version: "1.0"
+paths:
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Membuat akun pengguna baru.
+      parameters:
+      - description: Data registrasi
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      summary: Registrasi akun
+      tags:
+      - Auth
+  /auth/signin:
+    post:
+      consumes:
+      - application/json
+      description: Mengautentikasi pengguna dan membuat sesi baru.
+      parameters:
+      - description: Kredensial pengguna
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.SignInRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_auth.SignInResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      summary: Masuk
+      tags:
+      - Auth
+  /auth/signout:
+    post:
+      consumes:
+      - application/json
+      description: Menutup sesi pengguna berdasarkan session ID.
+      parameters:
+      - description: Sesi yang akan ditutup
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      summary: Keluar
+      tags:
+      - Auth
+  /auth/token:
+    post:
+      consumes:
+      - application/json
+      description: Membuat access token baru menggunakan refresh token.
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.TokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_auth.RefreshTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      summary: Perbarui access token
+      tags:
+      - Auth
+  /courses:
+    get:
+      description: Mengambil seluruh course yang tersedia.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.ListCourseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Daftar course
+      tags:
+      - Courses
+  /courses/{courseId}:
+    get:
+      description: Mengambil detail course beserta daftar modul dan status progres.
+      parameters:
+      - description: Course ID
+        in: path
+        name: courseId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.CourseDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Detail course
+      tags:
+      - Courses
+  /courses/{courseId}/modules/{moduleId}/progress:
+    put:
+      consumes:
+      - application/json
+      description: Membuat atau memperbarui progres modul milik pengguna.
+      parameters:
+      - description: Course ID
+        in: path
+        name: courseId
+        required: true
+        type: string
+      - description: Module ID
+        in: path
+        name: moduleId
+        required: true
+        type: string
+      - description: Progres modul
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.UpsertModuleProgressRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.ModuleProgressResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Perbarui progres modul
+      tags:
+      - Courses
+  /lessons:
+    get:
+      description: Mengambil lesson yang dikelompokkan berdasarkan modul beserta status
+        progres.
+      parameters:
+      - description: Course ID
+        in: query
+        name: courseId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.ListLessonResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Daftar lesson course
+      tags:
+      - Lessons
+  /lessons/{lessonId}:
+    get:
+      description: Mengambil konten lesson dan question set yang terkait.
+      parameters:
+      - description: Lesson ID
+        in: path
+        name: lessonId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.LessonDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Detail lesson
+      tags:
+      - Lessons
+  /lessons/{lessonId}/progress:
+    put:
+      consumes:
+      - application/json
+      description: Membuat atau memperbarui progres lesson milik pengguna.
+      parameters:
+      - description: Lesson ID
+        in: path
+        name: lessonId
+        required: true
+        type: string
+      - description: Progres lesson
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.UpsertLessonProgressRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_internal_course_model.LessonProgressResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Perbarui progres lesson
+      tags:
+      - Lessons
+  /question-sets:
+    get:
+      description: Mengambil seluruh question set untuk sebuah lesson.
+      parameters:
+      - description: Lesson ID
+        in: query
+        name: lessonId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_question.ListQuestionSetsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Daftar question set
+      tags:
+      - Questions
+  /question-sets/{questionSetId}:
+    get:
+      description: Mengambil detail question set beserta pertanyaannya.
+      parameters:
+      - description: Question set ID
+        in: path
+        name: questionSetId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_question.QuestionSetDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Detail question set
+      tags:
+      - Questions
+  /question-sets/{questionSetId}/attempts:
+    post:
+      description: Membuat attempt baru untuk sebuah question set.
+      parameters:
+      - description: Question set ID
+        in: path
+        name: questionSetId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_question.StartAttemptResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Mulai attempt
+      tags:
+      - Questions
+  /question-sets/{questionSetId}/attempts/{attemptId}/abandon:
+    post:
+      description: Menandai attempt aktif sebagai dibatalkan.
+      parameters:
+      - description: Question set ID
+        in: path
+        name: questionSetId
+        required: true
+        type: string
+      - description: Attempt ID
+        in: path
+        name: attemptId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_question.AbandonAttemptResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Batalkan attempt
+      tags:
+      - Questions
+  /question-sets/{questionSetId}/attempts/{attemptId}/submit:
+    post:
+      consumes:
+      - application/json
+      description: Mengirim jawaban, menilai attempt, dan mengembalikan hasilnya.
+      parameters:
+      - description: Question set ID
+        in: path
+        name: questionSetId
+        required: true
+        type: string
+      - description: Attempt ID
+        in: path
+        name: attemptId
+        required: true
+        type: string
+      - description: Daftar jawaban
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_question.SubmitAttemptRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_question.SubmitAttemptResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Kirim jawaban attempt
+      tags:
+      - Questions
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: 'Masukkan access token dengan format: Bearer {token}'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"nihon-no-hikari-api/config"
+	_ "nihon-no-hikari-api/docs"
 	"nihon-no-hikari-api/internal/auth"
 	"nihon-no-hikari-api/internal/course"
 	"nihon-no-hikari-api/internal/question"
@@ -12,6 +13,7 @@ import (
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/go-playground/validator/v10"
+	swaggo "github.com/gofiber/contrib/v3/swaggo"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 )
@@ -21,6 +23,17 @@ var bodyValidator = utils.BodyValidator{
 	Validator: validate,
 }
 
+//go:generate go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g cmd/main.go -d .. -o ../docs --parseDependency --parseInternal
+
+// @title Nihon no Hikari API
+// @version 1.0
+// @description REST API untuk platform pembelajaran Nihon no Hikari.
+// @BasePath /api/v1
+// @schemes http https
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Masukkan access token dengan format: Bearer {token}
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -58,6 +71,7 @@ func main() {
 	// FIBER APP
 	app := fiber.New()
 	app.Use(logger.New())
+	app.Get("/swagger/*", swaggo.HandlerDefault)
 
 	authHandler.RegisterRoutes(app)
 	courseHandler.RegisterRoutes(app)

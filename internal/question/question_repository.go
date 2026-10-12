@@ -2,7 +2,9 @@ package question
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"nihon-no-hikari-api/pkg/utils"
@@ -391,13 +393,16 @@ func (r *dbRepository) AbandonAttempt(ctx context.Context, questionSetID, attemp
 
 func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUID, limit int32, shuffle bool) ([]Question, error) {
 	const query = `
-		SELECT id, question_type, skill, prompt_text, stimulus_text, stimulus_media_url, points, order_index
-		FROM questions
-		WHERE question_set_id = $1
+		SELECT q.id, q.question_type, q.skill, q.prompt_text, q.stimulus_text, q.stimulus_media_url,
+			q.points, q.order_index, t.character, t.romaji, t.stroke_data,
+			CASE WHEN q.question_type = 'stroke_writing' THEN q.show_writing_guide END
+		FROM questions q
+		LEFT JOIN kana_stroke_templates t ON t.id = q.stroke_template_id
+		WHERE q.question_set_id = $1
 		ORDER BY
-			CASE WHEN $3 THEN random() ELSE order_index::double precision END,
-			order_index,
-			id
+			CASE WHEN $3 THEN random() ELSE q.order_index::double precision END,
+			q.order_index,
+			q.id
 		LIMIT $2
 	`
 	rows, err := tx.Query(ctx, query, questionSetID, limit, shuffle)
@@ -407,6 +412,8 @@ func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUI
 	questions := make([]Question, 0, limit)
 	for rows.Next() {
 		var item Question
+		var character, romaji *string
+		var strokeData []byte
 		if err := rows.Scan(
 			&item.ID,
 			&item.QuestionType,
@@ -416,7 +423,14 @@ func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUI
 			&item.StimulusMediaURL,
 			&item.Points,
 			&item.OrderIndex,
+			&character,
+			&romaji,
+			&strokeData,
+			&item.ShowWritingGuide,
 		); err != nil {
+			return nil, err
+		}
+		if err := assignWritingGuide(&item, character, romaji, strokeData); err != nil {
 			return nil, err
 		}
 		questions = append(questions, item)
@@ -444,14 +458,16 @@ type rowsQuerier interface {
 
 func loadQuestionSetQuestions(ctx context.Context, querier rowsQuerier, questionSetID uuid.UUID, shuffle bool) ([]Question, error) {
 	const query = `
-		SELECT id, question_type, skill, prompt_text, stimulus_text, stimulus_media_url, points, order_index
-		FROM questions
-		WHERE question_set_id = $1
+		SELECT q.id, q.question_type, q.skill, q.prompt_text, q.stimulus_text, q.stimulus_media_url,
+			q.points, q.order_index, t.character, t.romaji, t.stroke_data,
+			CASE WHEN q.question_type = 'stroke_writing' THEN q.show_writing_guide END
+		FROM questions q
+		LEFT JOIN kana_stroke_templates t ON t.id = q.stroke_template_id
+		WHERE q.question_set_id = $1
 		ORDER BY
-			CASE WHEN $2 THEN random() ELSE order_index::double precision END,
-			order_index,
-			id
-		LIMIT 15
+			CASE WHEN $2 THEN random() ELSE q.order_index::double precision END,
+			q.order_index,
+			q.id
 	`
 	rows, err := querier.Query(ctx, query, questionSetID, shuffle)
 	if err != nil {
@@ -461,6 +477,8 @@ func loadQuestionSetQuestions(ctx context.Context, querier rowsQuerier, question
 	questions := make([]Question, 0)
 	for rows.Next() {
 		var item Question
+		var character, romaji *string
+		var strokeData []byte
 		if err := rows.Scan(
 			&item.ID,
 			&item.QuestionType,
@@ -470,7 +488,15 @@ func loadQuestionSetQuestions(ctx context.Context, querier rowsQuerier, question
 			&item.StimulusMediaURL,
 			&item.Points,
 			&item.OrderIndex,
+			&character,
+			&romaji,
+			&strokeData,
+			&item.ShowWritingGuide,
 		); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := assignWritingGuide(&item, character, romaji, strokeData); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -492,6 +518,24 @@ func loadQuestionSetQuestions(ctx context.Context, querier rowsQuerier, question
 		}
 	}
 	return questions, nil
+}
+
+func assignWritingGuide(item *Question, character, romaji *string, strokeData []byte) error {
+	if item.QuestionType != QuestionTypeStrokeWriting {
+		return nil
+	}
+	if character == nil || romaji == nil || len(strokeData) == 0 {
+		return utils.ErrInvalidQuestionConfiguration
+	}
+	guide := &WritingGuide{Character: *character, Romaji: *romaji}
+	if err := json.Unmarshal(strokeData, guide); err != nil {
+		return fmt.Errorf("decode writing guide: %w", err)
+	}
+	if guide.ViewBox != 109 || len(guide.Strokes) == 0 {
+		return utils.ErrInvalidQuestionConfiguration
+	}
+	item.WritingGuide = guide
+	return nil
 }
 
 func loadQuestionOptions(ctx context.Context, querier rowsQuerier, questionID uuid.UUID) ([]QuestionOption, error) {
@@ -527,6 +571,7 @@ type gradingQuestion struct {
 	Skill        Skill
 	Explanation  *string
 	Points       int16
+	Guide        *WritingGuide
 }
 
 func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*AttemptResult, error) {
@@ -579,9 +624,11 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 	}
 
 	const questionsQuery = `
-		SELECT q.id, q.question_type, q.skill, q.explanation, q.points
+		SELECT q.id, q.question_type, q.skill, q.explanation, q.points,
+			t.character, t.romaji, t.stroke_data
 		FROM attempt_answers aa
 		JOIN questions q ON q.id = aa.question_id
+		LEFT JOIN kana_stroke_templates t ON t.id = q.stroke_template_id
 		WHERE aa.attempt_id = $1
 		ORDER BY q.order_index, q.id
 	`
@@ -592,9 +639,19 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 	questions := make([]gradingQuestion, 0)
 	for rows.Next() {
 		var item gradingQuestion
-		if err := rows.Scan(&item.ID, &item.QuestionType, &item.Skill, &item.Explanation, &item.Points); err != nil {
+		var character, romaji *string
+		var strokeData []byte
+		if err := rows.Scan(&item.ID, &item.QuestionType, &item.Skill, &item.Explanation, &item.Points, &character, &romaji, &strokeData); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		if item.QuestionType == QuestionTypeStrokeWriting {
+			question := Question{QuestionType: item.QuestionType}
+			if err := assignWritingGuide(&question, character, romaji, strokeData); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			item.Guide = question.WritingGuide
 		}
 		questions = append(questions, item)
 	}
@@ -628,14 +685,28 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 	skillEarned := map[Skill]int32{SkillReading: 0, SkillWriting: 0}
 	for _, item := range questions {
 		answer := answerByQuestion[item.ID]
-		if item.QuestionType != QuestionTypeMultipleChoice || !item.Skill.IsSupported() || item.Points <= 0 {
+		if !item.Skill.IsSupported() || item.Points <= 0 ||
+			(item.QuestionType != QuestionTypeMultipleChoice && item.QuestionType != QuestionTypeStrokeWriting) {
 			return nil, utils.ErrInvalidQuestionConfiguration
 		}
 
 		isCorrect := false
+		var accuracy *float64
 		if answer.hasResponse() {
 			var err error
-			isCorrect, err = gradeAnswer(ctx, tx, item, answer)
+			if item.QuestionType == QuestionTypeStrokeWriting {
+				if answer.SelectedOptionID != nil || item.Guide == nil {
+					return nil, utils.ErrInvalidAttempt
+				}
+				var value float64
+				isCorrect, value, err = EvaluateStrokeWriting(*item.Guide, answer.normalizedStrokeInput())
+				accuracy = &value
+				if err != nil {
+					return nil, fmt.Errorf("%w: %v", utils.ErrInvalidAttempt, err)
+				}
+			} else {
+				isCorrect, err = gradeAnswer(ctx, tx, item, answer)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -653,12 +724,13 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 			UPDATE attempt_answers
 			SET selected_option_id = $3,
 				stroke_input = $4,
-				is_correct = $5,
-				earned_points = $6,
+				accuracy = $5,
+				is_correct = $6,
+				earned_points = $7,
 				answered_at = now()
 			WHERE attempt_id = $1 AND question_id = $2
 		`
-		if _, err := tx.Exec(ctx, updateAnswerQuery, attemptID, item.ID, answer.SelectedOptionID, answer.normalizedStrokeInput(), isCorrect, earned); err != nil {
+		if _, err := tx.Exec(ctx, updateAnswerQuery, attemptID, item.ID, answer.SelectedOptionID, answer.normalizedStrokeInput(), accuracy, isCorrect, earned); err != nil {
 			return nil, err
 		}
 
@@ -669,6 +741,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 			EarnedPoints: earned,
 			MaxPoints:    item.Points,
 			Explanation:  item.Explanation,
+			Accuracy:     accuracy,
 		})
 	}
 	if totalPoints <= 0 || totalPoints > 32767 || earnedPoints > 32767 {

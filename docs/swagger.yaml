@@ -88,6 +88,8 @@ definitions:
     type: object
   internal_question.AnswerResult:
     properties:
+      accuracy:
+        type: number
       earned_points:
         type: integer
       explanation:
@@ -147,6 +149,15 @@ definitions:
       total_points:
         type: integer
     type: object
+  internal_question.GuideStroke:
+    properties:
+      path:
+        type: string
+      points:
+        items:
+          $ref: '#/definitions/internal_question.StrokePoint'
+        type: array
+    type: object
   internal_question.ListQuestionSetsResponse:
     properties:
       data:
@@ -174,12 +185,16 @@ definitions:
         type: string
       question_type:
         $ref: '#/definitions/internal_question.QuestionType'
+      show_writing_guide:
+        type: boolean
       skill:
         $ref: '#/definitions/internal_question.Skill'
       stimulus_media_url:
         type: string
       stimulus_text:
         type: string
+      writing_guide:
+        $ref: '#/definitions/internal_question.WritingGuide'
     type: object
   internal_question.QuestionOption:
     properties:
@@ -313,6 +328,13 @@ definitions:
       success:
         type: boolean
     type: object
+  internal_question.StrokePoint:
+    properties:
+      x:
+        type: number
+      "y":
+        type: number
+    type: object
   internal_question.SubmitAnswerRequest:
     properties:
       question_id:
@@ -339,6 +361,19 @@ definitions:
         type: string
       success:
         type: boolean
+    type: object
+  internal_question.WritingGuide:
+    properties:
+      character:
+        type: string
+      romaji:
+        type: string
+      strokes:
+        items:
+          $ref: '#/definitions/internal_question.GuideStroke'
+        type: array
+      view_box:
+        type: number
     type: object
   nihon-no-hikari-api_internal_course_model.Course:
     properties:

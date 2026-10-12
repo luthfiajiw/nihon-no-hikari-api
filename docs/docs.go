@@ -1059,6 +1059,9 @@ const docTemplate = `{
         "internal_question.AnswerResult": {
             "type": "object",
             "properties": {
+                "accuracy": {
+                    "type": "number"
+                },
                 "earned_points": {
                     "type": "integer"
                 },
@@ -1149,6 +1152,20 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_question.GuideStroke": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_question.StrokePoint"
+                    }
+                }
+            }
+        },
         "internal_question.ListQuestionSetsResponse": {
             "type": "object",
             "properties": {
@@ -1190,6 +1207,9 @@ const docTemplate = `{
                 "question_type": {
                     "$ref": "#/definitions/internal_question.QuestionType"
                 },
+                "show_writing_guide": {
+                    "type": "boolean"
+                },
                 "skill": {
                     "$ref": "#/definitions/internal_question.Skill"
                 },
@@ -1198,6 +1218,9 @@ const docTemplate = `{
                 },
                 "stimulus_text": {
                     "type": "string"
+                },
+                "writing_guide": {
+                    "$ref": "#/definitions/internal_question.WritingGuide"
                 }
             }
         },
@@ -1399,6 +1422,17 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_question.StrokePoint": {
+            "type": "object",
+            "properties": {
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                }
+            }
+        },
         "internal_question.SubmitAnswerRequest": {
             "type": "object",
             "properties": {
@@ -1438,6 +1472,26 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "internal_question.WritingGuide": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string"
+                },
+                "romaji": {
+                    "type": "string"
+                },
+                "strokes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_question.GuideStroke"
+                    }
+                },
+                "view_box": {
+                    "type": "number"
                 }
             }
         },

@@ -35,6 +35,23 @@ type QuestionOption struct {
 	OrderIndex int16     `json:"order_index"`
 }
 
+type StrokePoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type GuideStroke struct {
+	Path   string        `json:"path"`
+	Points []StrokePoint `json:"points"`
+}
+
+type WritingGuide struct {
+	Character string        `json:"character"`
+	Romaji    string        `json:"romaji"`
+	ViewBox   float64       `json:"view_box"`
+	Strokes   []GuideStroke `json:"strokes"`
+}
+
 type Question struct {
 	ID               uuid.UUID        `json:"id"`
 	QuestionType     QuestionType     `json:"question_type"`
@@ -45,6 +62,8 @@ type Question struct {
 	Points           int16            `json:"points"`
 	OrderIndex       int16            `json:"order_index"`
 	Options          []QuestionOption `json:"options"`
+	WritingGuide     *WritingGuide    `json:"writing_guide,omitempty"`
+	ShowWritingGuide *bool            `json:"show_writing_guide,omitempty"`
 }
 
 type QuestionSet struct {
@@ -165,6 +184,7 @@ type AnswerResult struct {
 	EarnedPoints int16     `json:"earned_points"`
 	MaxPoints    int16     `json:"max_points"`
 	Explanation  *string   `json:"explanation"`
+	Accuracy     *float64  `json:"accuracy,omitempty"`
 }
 
 type SkillResult struct {

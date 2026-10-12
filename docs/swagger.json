@@ -1056,6 +1056,9 @@
         "internal_question.AnswerResult": {
             "type": "object",
             "properties": {
+                "accuracy": {
+                    "type": "number"
+                },
                 "earned_points": {
                     "type": "integer"
                 },
@@ -1146,6 +1149,20 @@
                 }
             }
         },
+        "internal_question.GuideStroke": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_question.StrokePoint"
+                    }
+                }
+            }
+        },
         "internal_question.ListQuestionSetsResponse": {
             "type": "object",
             "properties": {
@@ -1187,6 +1204,9 @@
                 "question_type": {
                     "$ref": "#/definitions/internal_question.QuestionType"
                 },
+                "show_writing_guide": {
+                    "type": "boolean"
+                },
                 "skill": {
                     "$ref": "#/definitions/internal_question.Skill"
                 },
@@ -1195,6 +1215,9 @@
                 },
                 "stimulus_text": {
                     "type": "string"
+                },
+                "writing_guide": {
+                    "$ref": "#/definitions/internal_question.WritingGuide"
                 }
             }
         },
@@ -1396,6 +1419,17 @@
                 }
             }
         },
+        "internal_question.StrokePoint": {
+            "type": "object",
+            "properties": {
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                }
+            }
+        },
         "internal_question.SubmitAnswerRequest": {
             "type": "object",
             "properties": {
@@ -1435,6 +1469,26 @@
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "internal_question.WritingGuide": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string"
+                },
+                "romaji": {
+                    "type": "string"
+                },
+                "strokes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_question.GuideStroke"
+                    }
+                },
+                "view_box": {
+                    "type": "number"
                 }
             }
         },

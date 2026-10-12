@@ -15,9 +15,19 @@ Konten question dipisahkan menjadi:
 - `stimulus_text`: teks yang ditonjolkan, misalnya `あ` atau `saya mau pergi ke sekolah`
 - `stimulus_media_url`: alternatif stimulus berupa gambar atau media
 - `options`: pilihan jawaban yang dapat berisi teks Jepang maupun Indonesia
+- `writing_guide`: untuk `stroke_writing`, berisi `character`, `romaji`,
+  `view_box` (109), dan daftar `strokes` berurutan dengan `path` SVG serta
+  32 titik acuan `{x,y}` per stroke
+- `show_writing_guide`: untuk `stroke_writing`, menentukan apakah kanvas
+  menampilkan jalur, nomor, dan arah stroke. Data `writing_guide` tetap dikirim
+  untuk validasi goresan di klien; server selalu menilai input secara mandiri.
 
-Setiap question wajib mempunyai `prompt_text` dan minimal salah satu dari
-`stimulus_text` atau `stimulus_media_url`.
+Set writing Hiragana baris A berisi 25 soal berurutan: masing-masing lima soal
+untuk あ, い, う, え, dan お. Tiga soal pertama per kana menampilkan panduan;
+dua soal berikutnya memakai kanvas kosong.
+
+Setiap question wajib mempunyai `prompt_text`. Pilihan ganda membutuhkan
+`stimulus_text` atau `stimulus_media_url`; writing membutuhkan template stroke.
 
 ## 1. Daftar question set
 
@@ -92,6 +102,11 @@ Setiap jawaban yang diisi menggunakan salah satu dari `selected_option_id` atau
 hanya memuat soal yang sudah dijawab, atau memuat soal tanpa jawaban. Soal yang
 tidak dijawab mendapat 0 poin dan tetap masuk ke total bobot penilaian.
 `stroke_input` harus berupa JSON valid dengan ukuran maksimal 64 KiB.
+Untuk soal writing, bentuknya adalah array stroke berurutan, dengan masing-masing
+stroke berupa 3–256 titik `{x,y}` pada bidang 0–109. Jumlah stroke harus sama
+dengan panduan. Server menilai ulang urutan, arah, panjang, dan kedekatan jalur;
+hasilnya disimpan dalam `attempt_answers.accuracy`. Input yang tidak mengikuti
+format menghasilkan HTTP 400. Goresan yang bentuknya tidak sesuai bernilai 0.
 
 ## 5. Abandon attempt
 
@@ -123,7 +138,7 @@ berhasil (idempotent), sedangkan attempt yang sudah `submitted` menghasilkan
 - `PUT .../progress` tidak menerima status `completed`; completion hanya dapat
   berasal dari penilaian attempt.
 
-`stroke_writing` sudah menjadi bagian dari schema request melalui
-`stroke_input`, tetapi question bertipe ini belum boleh dipublikasikan sebelum
-evaluator stroke server-side tersedia. Skor akurasi tidak diterima dari client
-karena mudah dimanipulasi.
+Skor akurasi tidak diterima dari client. Panduan stroke Hiragana baris A berasal
+dari [KanjiVG r20260714](https://github.com/KanjiVG/kanjivg/releases/tag/r20260714),
+© Ulrich Apel dan kontributor, [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
+SVG asli dan konversi titik acuan tersedia di `pkg/db/stroke_sources`.

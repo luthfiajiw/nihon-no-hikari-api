@@ -110,3 +110,48 @@ func TestEvaluateStrokeWritingRejectsMalformedInput(t *testing.T) {
 		t.Fatal("expected bounds error")
 	}
 }
+
+func TestFreeWritingAcceptsArbitraryDrawingWithoutAccuracy(t *testing.T) {
+	guide := loadTestGuides(t)[0]
+	// Wrong shape, direction, position, and stroke count are all acceptable
+	// for the two unguided questions, as long as the payload is a drawing.
+	input := json.RawMessage(`[[{"x":1,"y":1},{"x":2,"y":2}]]`)
+	valid, accuracy, err := gradeStrokeWriting(guide, false, input)
+	if err != nil || !valid || accuracy != nil {
+		t.Fatalf("free writing: valid=%v accuracy=%v err=%v", valid, accuracy, err)
+	}
+	valid, accuracy, err = gradeStrokeWriting(guide, true, input)
+	if err != nil || valid || accuracy == nil {
+		t.Fatalf("guided writing unexpectedly accepted: valid=%v accuracy=%v err=%v", valid, accuracy, err)
+	}
+	valid, accuracy, err = gradeStrokeWriting(guide, false, json.RawMessage(`[]`))
+	if err != nil || valid || accuracy != nil {
+		t.Fatalf("empty writing: valid=%v accuracy=%v err=%v", valid, accuracy, err)
+	}
+}
+
+func TestFreeWritingRejectsMalformedDrawing(t *testing.T) {
+	for _, raw := range []string{
+		`{"x":1}`,
+		`[[{"x":1,"y":1}]]`,
+		`[[{}, {"x":2,"y":2}]]`,
+		`[[{"x":1,"y":1},{"x":110,"y":2}]]`,
+		`[[{"x":1,"y":1,"extra":1},{"x":2,"y":2}]]`,
+	} {
+		if valid, err := ValidateFreeStrokeWriting(109, json.RawMessage(raw)); err == nil || valid {
+			t.Fatalf("malformed drawing accepted: %s", raw)
+		}
+	}
+	stroke := []StrokePoint{{X: 1, Y: 1}, {X: 2, Y: 2}}
+	tooMany := make([][]StrokePoint, maxFreeStrokes+1)
+	for index := range tooMany {
+		tooMany[index] = stroke
+	}
+	input, err := json.Marshal(tooMany)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid, err := ValidateFreeStrokeWriting(109, input); err == nil || valid {
+		t.Fatal("too many strokes accepted")
+	}
+}

@@ -43,12 +43,14 @@ func (m *middleware) AuthMiddleware() fiber.Handler {
 		}
 
 		sessionSql := `
-			SELECT is_blocked
-			FROM user_sessions
-			WHERE id = $1 AND user_id = $2
+			SELECT s.is_blocked, u.role
+			FROM user_sessions s
+			JOIN users u ON u.id = s.user_id
+			WHERE s.id = $1 AND s.user_id = $2 AND s.expires_at > NOW()
 		`
 		var isBlocked bool
-		err = m.pool.QueryRow(c.Context(), sessionSql, payload.ID, payload.UserID).Scan(&isBlocked)
+		var role string
+		err = m.pool.QueryRow(c.Context(), sessionSql, payload.ID, payload.UserID).Scan(&isBlocked, &role)
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"success": false,
@@ -63,7 +65,17 @@ func (m *middleware) AuthMiddleware() fiber.Handler {
 		}
 
 		c.Locals(utils.UserIDKey, payload.UserID)
+		c.Locals(utils.UserRoleKey, role)
 
+		return c.Next()
+	}
+}
+
+func (m *middleware) RequireRole(role string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if c.Locals(utils.UserRoleKey) != role {
+			return c.Status(fiber.StatusForbidden).JSON(utils.ErrorRes{Success: false, Error: "akses tidak diizinkan"})
+		}
 		return c.Next()
 	}
 }

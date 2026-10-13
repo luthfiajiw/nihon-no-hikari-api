@@ -26,6 +26,23 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	group.Post("/:questionSetId/attempts", h.startAttempt)
 	group.Post("/:questionSetId/attempts/:attemptId/abandon", h.abandonAttempt)
 	group.Post("/:questionSetId/attempts/:attemptId/submit", h.submitAttempt)
+	app.Get("/api/v1/modules/:moduleId/question-sets", h.middleware.AuthMiddleware(), h.listModuleExams)
+}
+
+func (h *Handler) listModuleExams(c fiber.Ctx) error {
+	moduleID, err := uuid.Parse(c.Params("moduleId"))
+	if err != nil {
+		return errorJSON(c, fiber.StatusBadRequest, errors.New("moduleId tidak valid"))
+	}
+	userID, ok := c.Locals(utils.UserIDKey).(uuid.UUID)
+	if !ok {
+		return errorJSON(c, fiber.StatusUnauthorized, errors.New("user tidak terautentikasi"))
+	}
+	res, err := h.service.ListModuleExams(c.Context(), moduleID, userID)
+	if err != nil {
+		return errorJSON(c, fiber.StatusInternalServerError, err)
+	}
+	return c.JSON(res)
 }
 
 // getQuestionSetDetail godoc

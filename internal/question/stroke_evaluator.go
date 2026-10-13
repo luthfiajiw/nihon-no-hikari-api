@@ -8,6 +8,76 @@ import (
 )
 
 const maxStrokePoints = 256
+const maxFreeStrokes = 16
+
+func gradeStrokeWriting(guide WritingGuide, showGuide bool, input json.RawMessage) (bool, *float64, error) {
+	if !showGuide {
+		valid, err := ValidateFreeStrokeWriting(guide.ViewBox, input)
+		return valid, nil, err
+	}
+	valid, accuracy, err := EvaluateStrokeWriting(guide, input)
+	return valid, &accuracy, err
+}
+
+// ValidateFreeStrokeWriting checks the payload shape only. Free writing has no
+// template-based score; any non-empty drawing earns the question's points.
+func ValidateFreeStrokeWriting(viewBox float64, input json.RawMessage) (bool, error) {
+	if viewBox != 109 {
+		return false, errors.New("bidang tulisan tidak valid")
+	}
+	if len(input) == 0 {
+		return false, nil
+	}
+	strokes, err := decodeStrokeInput(input)
+	if err != nil {
+		return false, err
+	}
+	if len(strokes) == 0 {
+		return false, nil
+	}
+	if len(strokes) > maxFreeStrokes {
+		return false, errors.New("jumlah stroke maksimal 16")
+	}
+	for _, stroke := range strokes {
+		if len(stroke) < 2 || len(stroke) > maxStrokePoints {
+			return false, errors.New("setiap stroke harus berisi 2 hingga 256 titik")
+		}
+		for _, point := range stroke {
+			if !validStrokePoint(point, viewBox) {
+				return false, errors.New("koordinat stroke di luar bidang tulisan")
+			}
+		}
+	}
+	return true, nil
+}
+
+func decodeStrokeInput(input json.RawMessage) ([][]StrokePoint, error) {
+	var payload [][]struct {
+		X *float64 `json:"x"`
+		Y *float64 `json:"y"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(input))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil || payload == nil {
+		return nil, errors.New("stroke_input harus berupa array stroke")
+	}
+	strokes := make([][]StrokePoint, len(payload))
+	for index, points := range payload {
+		strokes[index] = make([]StrokePoint, len(points))
+		for pointIndex, point := range points {
+			if point.X == nil || point.Y == nil {
+				return nil, errors.New("setiap titik stroke harus memiliki x dan y")
+			}
+			strokes[index][pointIndex] = StrokePoint{X: *point.X, Y: *point.Y}
+		}
+	}
+	return strokes, nil
+}
+
+func validStrokePoint(point StrokePoint, viewBox float64) bool {
+	return !math.IsNaN(point.X) && !math.IsInf(point.X, 0) && !math.IsNaN(point.Y) && !math.IsInf(point.Y, 0) &&
+		point.X >= 0 && point.X <= viewBox && point.Y >= 0 && point.Y <= viewBox
+}
 
 // EvaluateStrokeWriting checks every stroke against its corresponding guide path.
 // Coordinates and thresholds are in the KanjiVG 109 x 109 view box.
@@ -18,11 +88,9 @@ func EvaluateStrokeWriting(guide WritingGuide, input json.RawMessage) (bool, flo
 	if len(input) == 0 {
 		return false, 0, nil
 	}
-	var strokes [][]StrokePoint
-	decoder := json.NewDecoder(bytes.NewReader(input))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&strokes); err != nil || strokes == nil {
-		return false, 0, errors.New("stroke_input harus berupa array stroke")
+	strokes, err := decodeStrokeInput(input)
+	if err != nil {
+		return false, 0, err
 	}
 	if len(strokes) != len(guide.Strokes) {
 		return false, 0, nil
@@ -34,8 +102,7 @@ func EvaluateStrokeWriting(guide WritingGuide, input json.RawMessage) (bool, flo
 			return false, 0, errors.New("setiap stroke harus berisi 3 hingga 256 titik")
 		}
 		for _, point := range stroke {
-			if math.IsNaN(point.X) || math.IsInf(point.X, 0) || math.IsNaN(point.Y) || math.IsInf(point.Y, 0) ||
-				point.X < 0 || point.X > guide.ViewBox || point.Y < 0 || point.Y > guide.ViewBox {
+			if !validStrokePoint(point, guide.ViewBox) {
 				return false, 0, errors.New("koordinat stroke di luar panduan")
 			}
 		}

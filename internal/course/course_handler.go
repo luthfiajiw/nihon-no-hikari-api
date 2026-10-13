@@ -128,6 +128,8 @@ func (h *Handler) upsertModuleProgress(c fiber.Ctx) error {
 			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		case errors.Is(err, utils.ErrModulePrerequisiteNotCompleted):
 			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrModuleCompletionRequiresExam):
+			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		default:
 			return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		}

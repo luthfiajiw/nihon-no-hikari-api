@@ -25,6 +25,7 @@ var (
 	ErrModulePrerequisiteNotCompleted = errors.New("modul sebelumnya belum selesai")
 	ErrLessonPrerequisiteNotCompleted = errors.New("pelajaran sebelumnya belum selesai")
 	ErrLessonCompletionRequiresQuiz   = errors.New("pelajaran hanya dapat diselesaikan dengan lulus question set")
+	ErrModuleCompletionRequiresExam   = errors.New("nilai dan penyelesaian module hanya dapat diubah melalui ujian")
 	ErrQuestionSetNotFound            = errors.New("question set tidak ditemukan")
 	ErrQuestionSetEmpty               = errors.New("question set belum memiliki pertanyaan")
 	ErrInvalidAttempt                 = errors.New("data attempt tidak valid")

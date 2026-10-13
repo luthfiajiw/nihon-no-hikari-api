@@ -20,17 +20,18 @@ type dbRepository struct {
 // CreateTx implements [Repository].
 func (d *dbRepository) CreateTx(ctx context.Context, tx pgx.Tx, params UserParams) (User, error) {
 	q := `
-		INSERT INTO users (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id
+		INSERT INTO users (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id, role
 	`
 
 	var userID uuid.UUID
+	var role Role
 	err := tx.QueryRow(
 		ctx,
 		q,
 		params.Email,
 		params.DisplayName,
 		params.Password,
-	).Scan(&userID)
+	).Scan(&userID, &role)
 
 	if err != nil {
 		return User{}, err
@@ -41,6 +42,7 @@ func (d *dbRepository) CreateTx(ctx context.Context, tx pgx.Tx, params UserParam
 		Email:       params.Email,
 		DisplayName: params.DisplayName,
 		AvatarURL:   nil,
+		Role:        role,
 	}, nil
 }
 
@@ -49,7 +51,7 @@ func (d *dbRepository) FindBy(ctx context.Context, params FindUserParam) (User, 
 	var row pgx.Row
 
 	q := `
-		SELECT id, email, display_name, avatar_url, password_hash FROM users
+		SELECT id, email, display_name, avatar_url, password_hash, role FROM users
 	`
 
 	if params.ID != uuid.Nil {
@@ -62,7 +64,7 @@ func (d *dbRepository) FindBy(ctx context.Context, params FindUserParam) (User, 
 	}
 
 	var user User
-	err := row.Scan(&user.ID, &user.Email, &user.DisplayName, &user.AvatarURL, &user.Password)
+	err := row.Scan(&user.ID, &user.Email, &user.DisplayName, &user.AvatarURL, &user.Password, &user.Role)
 
 	if err != nil {
 		return User{}, err

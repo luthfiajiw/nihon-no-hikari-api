@@ -16,6 +16,7 @@ import (
 
 type Repository interface {
 	ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) ([]QuestionSet, error)
+	ListModuleExams(ctx context.Context, moduleID, userID uuid.UUID) ([]QuestionSet, error)
 	GetQuestionSetDetail(ctx context.Context, questionSetID, userID uuid.UUID) (*QuestionSetDetail, error)
 	StartAttempt(ctx context.Context, questionSetID, userID uuid.UUID) (*Attempt, error)
 	AbandonAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID) error
@@ -27,6 +28,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, questionSetID, 
 		SELECT
 			qs.id,
 			qs.lesson_id,
+			qs.module_id,
 			qs.kind,
 			qs.title,
 			qs.order_index,
@@ -42,28 +44,30 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, questionSetID, 
 			qs.shuffle_questions,
 			EXISTS (
 				SELECT 1 FROM attempts a
-				WHERE a.question_set_id = qs.id AND a.user_id = $2 AND a.is_passed = true
+				JOIN question_sets attempted_set ON attempted_set.id = a.question_set_id
+				WHERE attempted_set.lineage_id = qs.lineage_id AND a.user_id = $2 AND a.is_passed = true
 			),
 			(
 				SELECT COUNT(*)::integer FROM attempts a
 				WHERE a.question_set_id = qs.id AND a.user_id = $2 AND a.status <> 'abandoned'
 			)
 		FROM question_sets qs
-		JOIN lessons ls ON ls.id = qs.lesson_id
-		JOIN modules m ON m.id = ls.module_id
+		LEFT JOIN lessons ls ON ls.id = qs.lesson_id
+		JOIN modules m ON m.id = COALESCE(qs.module_id, ls.module_id)
 		JOIN courses c ON c.id = m.course_id
 		WHERE qs.id = $1
-			AND qs.kind = 'practice'
 			AND qs.is_published = true
+			AND qs.archived_at IS NULL
 			AND c.is_published = true
 			AND m.is_published = true
-			AND ls.is_published = true
+			AND (qs.kind = 'final_exam' OR ls.is_published = true)
 	`
 
 	detail := &QuestionSetDetail{}
 	err := r.pool.QueryRow(ctx, query, questionSetID, userID).Scan(
 		&detail.ID,
 		&detail.LessonID,
+		&detail.ModuleID,
 		&detail.Kind,
 		&detail.Title,
 		&detail.OrderIndex,
@@ -125,6 +129,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uu
 		SELECT
 			qs.id,
 			qs.lesson_id,
+			qs.module_id,
 			qs.kind,
 			qs.title,
 			qs.order_index,
@@ -136,8 +141,8 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uu
 			qs.cooldown_minutes,
 			qs.shuffle_questions,
 			EXISTS (
-				SELECT 1 FROM attempts a
-				WHERE a.question_set_id = qs.id AND a.user_id = $2 AND a.is_passed = true
+				SELECT 1 FROM attempts a JOIN question_sets old_set ON old_set.id=a.question_set_id
+				WHERE old_set.lineage_id = qs.lineage_id AND a.user_id = $2 AND a.is_passed = true
 			),
 			(
 				SELECT COUNT(*)::integer FROM attempts a
@@ -148,6 +153,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uu
 		WHERE qs.lesson_id = $1
 			AND qs.kind = 'practice'
 			AND qs.is_published = true
+			AND qs.archived_at IS NULL
 		GROUP BY qs.id
 		ORDER BY qs.order_index, qs.id
 	`
@@ -164,6 +170,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uu
 		if err := rows.Scan(
 			&set.ID,
 			&set.LessonID,
+			&set.ModuleID,
 			&set.Kind,
 			&set.Title,
 			&set.OrderIndex,
@@ -188,6 +195,37 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uu
 	return sets, nil
 }
 
+func (r *dbRepository) ListModuleExams(ctx context.Context, moduleID, userID uuid.UUID) ([]QuestionSet, error) {
+	const query = `
+		SELECT qs.id,qs.lesson_id,qs.module_id,qs.kind,qs.title,qs.order_index,qs.skill,
+			qs.passing_score,LEAST(COALESCE(qs.total_questions::integer,COUNT(q.id)::integer),COUNT(q.id)::integer)::integer,
+			qs.time_limit_seconds,qs.max_attempts,qs.cooldown_minutes,qs.shuffle_questions,
+			EXISTS(SELECT 1 FROM attempts a JOIN question_sets old_set ON old_set.id=a.question_set_id
+				WHERE old_set.lineage_id=qs.lineage_id AND a.user_id=$2 AND a.is_passed),
+			(SELECT COUNT(*)::integer FROM attempts a WHERE a.question_set_id=qs.id AND a.user_id=$2 AND a.status<>'abandoned')
+		FROM question_sets qs
+		JOIN modules m ON m.id=qs.module_id
+		JOIN courses c ON c.id=m.course_id
+		LEFT JOIN questions q ON q.question_set_id=qs.id
+		WHERE qs.module_id=$1 AND qs.kind='final_exam' AND qs.is_published AND qs.archived_at IS NULL
+			AND m.is_published AND c.is_published
+		GROUP BY qs.id ORDER BY qs.order_index,qs.id`
+	rows, err := r.pool.Query(ctx, query, moduleID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	sets := make([]QuestionSet, 0)
+	for rows.Next() {
+		var s QuestionSet
+		if err := rows.Scan(&s.ID, &s.LessonID, &s.ModuleID, &s.Kind, &s.Title, &s.OrderIndex, &s.Skill, &s.PassingScore, &s.QuestionCount, &s.TimeLimitSeconds, &s.MaxAttempts, &s.CooldownMinutes, &s.ShuffleQuestions, &s.IsPassed, &s.AttemptsUsed); err != nil {
+			return nil, err
+		}
+		sets = append(sets, s)
+	}
+	return sets, rows.Err()
+}
+
 func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID uuid.UUID) (*Attempt, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -199,6 +237,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID u
 		SELECT
 			qs.id,
 			qs.lesson_id,
+			qs.module_id,
 			qs.kind,
 			qs.title,
 			qs.order_index,
@@ -210,15 +249,15 @@ func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID u
 			qs.cooldown_minutes,
 			qs.shuffle_questions
 		FROM question_sets qs
-		JOIN lessons ls ON ls.id = qs.lesson_id
-		JOIN modules m ON m.id = ls.module_id
+		LEFT JOIN lessons ls ON ls.id = qs.lesson_id
+		JOIN modules m ON m.id = COALESCE(qs.module_id,ls.module_id)
 		JOIN courses c ON c.id = m.course_id
 		WHERE qs.id = $1
-			AND qs.kind = 'practice'
 			AND qs.is_published = true
+			AND qs.archived_at IS NULL
 			AND c.is_published = true
 			AND m.is_published = true
-			AND ls.is_published = true
+			AND (qs.kind='final_exam' OR ls.is_published = true)
 		FOR UPDATE OF qs
 	`
 
@@ -227,6 +266,7 @@ func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID u
 	err = tx.QueryRow(ctx, setQuery, questionSetID).Scan(
 		&set.ID,
 		&set.LessonID,
+		&set.ModuleID,
 		&set.Kind,
 		&set.Title,
 		&set.OrderIndex,
@@ -270,8 +310,20 @@ func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID u
 		)
 	`
 	var prerequisitesCompleted bool
-	if err := tx.QueryRow(ctx, prerequisiteQuery, set.LessonID, userID).Scan(&prerequisitesCompleted); err != nil {
-		return nil, err
+	if set.Kind == QuestionSetKindPractice {
+		if err := tx.QueryRow(ctx, prerequisiteQuery, set.LessonID, userID).Scan(&prerequisitesCompleted); err != nil {
+			return nil, err
+		}
+	} else {
+		const moduleReady = `SELECT
+			NOT EXISTS(SELECT 1 FROM lessons l LEFT JOIN user_lesson_progress p ON p.lesson_id=l.id AND p.user_id=$2
+				WHERE l.module_id=$1 AND l.is_published AND COALESCE(p.status::text,'')<>'completed')
+			AND NOT EXISTS(SELECT 1 FROM module_prerequisites mp
+				LEFT JOIN user_module_progress p ON p.module_id=mp.required_module_id AND p.user_id=$2
+				WHERE mp.module_id=$1 AND COALESCE(p.status::text,'')<>'completed')`
+		if err := tx.QueryRow(ctx, moduleReady, set.ModuleID, userID).Scan(&prerequisitesCompleted); err != nil {
+			return nil, err
+		}
 	}
 	if !prerequisitesCompleted {
 		return nil, utils.ErrLessonPrerequisiteNotCompleted
@@ -291,6 +343,9 @@ func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID u
 	var lastSubmittedAt *time.Time
 	var lastAttemptNumber int16
 	if err := tx.QueryRow(ctx, attemptStatsQuery, userID, questionSetID).Scan(&attemptCount, &lastSubmittedAt, &set.IsPassed, &lastAttemptNumber); err != nil {
+		return nil, err
+	}
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attempts a JOIN question_sets old_set ON old_set.id=a.question_set_id JOIN question_sets current_set ON current_set.lineage_id=old_set.lineage_id WHERE current_set.id=$1 AND a.user_id=$2 AND a.is_passed)`, questionSetID, userID).Scan(&set.IsPassed); err != nil {
 		return nil, err
 	}
 	set.AttemptsUsed = attemptCount
@@ -368,7 +423,6 @@ func (r *dbRepository) AbandonAttempt(ctx context.Context, questionSetID, attemp
 		WHERE a.id = $1
 			AND a.user_id = $2
 			AND qs.id = $3
-			AND qs.kind = 'practice'
 		FOR UPDATE OF a
 	`
 	var status string
@@ -566,12 +620,13 @@ func loadQuestionOptions(ctx context.Context, querier rowsQuerier, questionID uu
 }
 
 type gradingQuestion struct {
-	ID           uuid.UUID
-	QuestionType QuestionType
-	Skill        Skill
-	Explanation  *string
-	Points       int16
-	Guide        *WritingGuide
+	ID               uuid.UUID
+	QuestionType     QuestionType
+	Skill            Skill
+	Explanation      *string
+	Points           int16
+	Guide            *WritingGuide
+	ShowWritingGuide bool
 }
 
 func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID, req SubmitAttemptRequest) (*AttemptResult, error) {
@@ -582,31 +637,26 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	const attemptQuery = `
-		SELECT a.status, a.started_at, qs.lesson_id, qs.passing_score, qs.time_limit_seconds
+		SELECT a.status, a.started_at, qs.lesson_id, qs.module_id, qs.kind, qs.passing_score, qs.time_limit_seconds
 		FROM attempts a
 		JOIN question_sets qs ON qs.id = a.question_set_id
-		JOIN lessons ls ON ls.id = qs.lesson_id
-		JOIN modules m ON m.id = ls.module_id
-		JOIN courses c ON c.id = m.course_id
 		WHERE a.id = $1
 			AND a.user_id = $2
 			AND qs.id = $3
-			AND qs.kind = 'practice'
-			AND qs.is_published = true
-			AND ls.is_published = true
-			AND m.is_published = true
-			AND c.is_published = true
 		FOR UPDATE OF a
 	`
 	var status string
 	var startedAt time.Time
-	var lessonID uuid.UUID
+	var lessonID, moduleID *uuid.UUID
+	var kind QuestionSetKind
 	var passingScore int16
 	var timeLimitSeconds *int32
 	err = tx.QueryRow(ctx, attemptQuery, attemptID, userID, questionSetID).Scan(
 		&status,
 		&startedAt,
 		&lessonID,
+		&moduleID,
+		&kind,
 		&passingScore,
 		&timeLimitSeconds,
 	)
@@ -625,7 +675,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 
 	const questionsQuery = `
 		SELECT q.id, q.question_type, q.skill, q.explanation, q.points,
-			t.character, t.romaji, t.stroke_data
+			t.character, t.romaji, t.stroke_data, q.show_writing_guide
 		FROM attempt_answers aa
 		JOIN questions q ON q.id = aa.question_id
 		LEFT JOIN kana_stroke_templates t ON t.id = q.stroke_template_id
@@ -641,7 +691,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 		var item gradingQuestion
 		var character, romaji *string
 		var strokeData []byte
-		if err := rows.Scan(&item.ID, &item.QuestionType, &item.Skill, &item.Explanation, &item.Points, &character, &romaji, &strokeData); err != nil {
+		if err := rows.Scan(&item.ID, &item.QuestionType, &item.Skill, &item.Explanation, &item.Points, &character, &romaji, &strokeData, &item.ShowWritingGuide); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -698,9 +748,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 				if answer.SelectedOptionID != nil || item.Guide == nil {
 					return nil, utils.ErrInvalidAttempt
 				}
-				var value float64
-				isCorrect, value, err = EvaluateStrokeWriting(*item.Guide, answer.normalizedStrokeInput())
-				accuracy = &value
+				isCorrect, accuracy, err = gradeStrokeWriting(*item.Guide, item.ShowWritingGuide, answer.normalizedStrokeInput())
 				if err != nil {
 					return nil, fmt.Errorf("%w: %v", utils.ErrInvalidAttempt, err)
 				}
@@ -784,7 +832,9 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 		return nil, err
 	}
 
-	const lessonPassedQuery = `
+	lessonStatus, moduleStatus := "", ""
+	if kind == QuestionSetKindPractice {
+		const lessonPassedQuery = `
 		SELECT NOT EXISTS (
 			SELECT 1
 			FROM question_sets required_set
@@ -794,22 +844,23 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 				AND NOT EXISTS (
 					SELECT 1
 					FROM attempts passed_attempt
-					WHERE passed_attempt.question_set_id = required_set.id
+					JOIN question_sets attempted_set ON attempted_set.id=passed_attempt.question_set_id
+					WHERE attempted_set.lineage_id=required_set.lineage_id
 						AND passed_attempt.user_id = $2
 						AND passed_attempt.is_passed = true
 				)
 		)
 	`
-	var lessonPassed bool
-	if err := tx.QueryRow(ctx, lessonPassedQuery, lessonID, userID).Scan(&lessonPassed); err != nil {
-		return nil, err
-	}
+		var lessonPassed bool
+		if err := tx.QueryRow(ctx, lessonPassedQuery, lessonID, userID).Scan(&lessonPassed); err != nil {
+			return nil, err
+		}
 
-	desiredStatus := "in_progress"
-	if lessonPassed {
-		desiredStatus = "completed"
-	}
-	const progressQuery = `
+		desiredStatus := "in_progress"
+		if lessonPassed {
+			desiredStatus = "completed"
+		}
+		const progressQuery = `
 		INSERT INTO user_lesson_progress AS progress (user_id, lesson_id, status, completed_at, updated_at)
 		VALUES (
 			$1,
@@ -831,9 +882,33 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 			updated_at = now()
 		RETURNING status::text
 	`
-	var lessonStatus string
-	if err := tx.QueryRow(ctx, progressQuery, userID, lessonID, desiredStatus).Scan(&lessonStatus); err != nil {
-		return nil, err
+		if err := tx.QueryRow(ctx, progressQuery, userID, lessonID, desiredStatus).Scan(&lessonStatus); err != nil {
+			return nil, err
+		}
+	} else {
+		const modulePassedQuery = `SELECT NOT EXISTS(
+			SELECT 1 FROM question_sets required_set
+			WHERE required_set.module_id=$1 AND required_set.kind='final_exam' AND required_set.is_published AND required_set.archived_at IS NULL
+			AND NOT EXISTS(SELECT 1 FROM attempts passed_attempt
+			JOIN question_sets attempted_set ON attempted_set.id=passed_attempt.question_set_id
+			WHERE attempted_set.lineage_id=required_set.lineage_id AND passed_attempt.user_id=$2 AND passed_attempt.is_passed))`
+		var modulePassed bool
+		if err := tx.QueryRow(ctx, modulePassedQuery, moduleID, userID).Scan(&modulePassed); err != nil {
+			return nil, err
+		}
+		moduleStatus = "in_progress"
+		if modulePassed {
+			moduleStatus = "completed"
+		}
+		const moduleProgressQuery = `INSERT INTO user_module_progress AS p(user_id,module_id,status,best_score,unlocked_at,completed_at,updated_at)
+			VALUES($1,$2,$3::progress_status,$4,now(),CASE WHEN $3='completed' THEN now() END,now())
+			ON CONFLICT(user_id,module_id) DO UPDATE SET status=CASE WHEN p.status='completed' THEN p.status ELSE EXCLUDED.status END,
+			best_score=GREATEST(COALESCE(p.best_score,0),EXCLUDED.best_score),
+			completed_at=CASE WHEN p.status='completed' THEN p.completed_at ELSE EXCLUDED.completed_at END,updated_at=now()
+			RETURNING status::text`
+		if err := tx.QueryRow(ctx, moduleProgressQuery, userID, moduleID, moduleStatus, score).Scan(&moduleStatus); err != nil {
+			return nil, err
+		}
 	}
 
 	result := &AttemptResult{
@@ -844,6 +919,7 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 		PassingScore: passingScore,
 		IsPassed:     isPassed,
 		LessonStatus: lessonStatus,
+		ModuleStatus: moduleStatus,
 		SubmittedAt:  submittedAt,
 		Skills:       skillResults,
 		Answers:      results,

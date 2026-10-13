@@ -4,6 +4,7 @@ import (
 	"log"
 	"nihon-no-hikari-api/config"
 	_ "nihon-no-hikari-api/docs"
+	"nihon-no-hikari-api/internal/admin"
 	"nihon-no-hikari-api/internal/auth"
 	"nihon-no-hikari-api/internal/course"
 	"nihon-no-hikari-api/internal/question"
@@ -67,6 +68,8 @@ func main() {
 	authHandler := auth.NewHandler(authService, bodyValidator)
 	courseHandler := course.NewHandler(courseService, authMiddleware)
 	questionHandler := question.NewHandler(questionService, authMiddleware)
+	userHandler := user.NewHandler(pool, authMiddleware)
+	adminHandler := admin.NewHandler(pool, authMiddleware)
 
 	// FIBER APP
 	app := fiber.New()
@@ -76,6 +79,8 @@ func main() {
 	authHandler.RegisterRoutes(app)
 	courseHandler.RegisterRoutes(app)
 	questionHandler.RegisterRoutes(app)
+	userHandler.RegisterRoutes(app)
+	adminHandler.RegisterRoutes(app)
 
 	if err := app.Listen(cfg.Port); err != nil {
 		log.Fatalf("server failed to start: %v", err)

@@ -68,7 +68,8 @@ type Question struct {
 
 type QuestionSet struct {
 	ID               uuid.UUID       `json:"id"`
-	LessonID         uuid.UUID       `json:"lesson_id"`
+	LessonID         *uuid.UUID      `json:"lesson_id,omitempty"`
+	ModuleID         *uuid.UUID      `json:"module_id,omitempty"`
 	Kind             QuestionSetKind `json:"kind"`
 	Title            string          `json:"title"`
 	OrderIndex       int16           `json:"order_index"`
@@ -202,7 +203,8 @@ type AttemptResult struct {
 	TotalPoints  int16          `json:"total_points"`
 	PassingScore int16          `json:"passing_score"`
 	IsPassed     bool           `json:"is_passed"`
-	LessonStatus string         `json:"lesson_status"`
+	LessonStatus string         `json:"lesson_status,omitempty"`
+	ModuleStatus string         `json:"module_status,omitempty"`
 	SubmittedAt  time.Time      `json:"submitted_at"`
 	Skills       []SkillResult  `json:"skills"`
 	Answers      []AnswerResult `json:"answers"`

@@ -19,8 +19,8 @@ Konten question dipisahkan menjadi:
   `view_box` (109), dan daftar `strokes` berurutan dengan `path` SVG serta
   32 titik acuan `{x,y}` per stroke
 - `show_writing_guide`: untuk `stroke_writing`, menentukan apakah kanvas
-  menampilkan jalur, nomor, dan arah stroke. Data `writing_guide` tetap dikirim
-  untuk validasi goresan di klien; server selalu menilai input secara mandiri.
+  menampilkan jalur, nomor, dan arah stroke. Jika `false`, soal memakai mode
+  menulis bebas: isi tulisan tidak dicocokkan dengan template.
 
 Set writing Hiragana baris A berisi 25 soal berurutan: masing-masing lima soal
 untuk あ, い, う, え, dan お. Tiga soal pertama per kana menampilkan panduan;
@@ -102,11 +102,16 @@ Setiap jawaban yang diisi menggunakan salah satu dari `selected_option_id` atau
 hanya memuat soal yang sudah dijawab, atau memuat soal tanpa jawaban. Soal yang
 tidak dijawab mendapat 0 poin dan tetap masuk ke total bobot penilaian.
 `stroke_input` harus berupa JSON valid dengan ukuran maksimal 64 KiB.
-Untuk soal writing, bentuknya adalah array stroke berurutan, dengan masing-masing
-stroke berupa 3–256 titik `{x,y}` pada bidang 0–109. Jumlah stroke harus sama
-dengan panduan. Server menilai ulang urutan, arah, panjang, dan kedekatan jalur;
-hasilnya disimpan dalam `attempt_answers.accuracy`. Input yang tidak mengikuti
-format menghasilkan HTTP 400. Goresan yang bentuknya tidak sesuai bernilai 0.
+Untuk soal writing, bentuknya adalah array stroke berisi titik `{x,y}` pada
+bidang 0–109. Pada soal berpanduan, tiap stroke memiliki 3–256 titik, jumlah
+stroke harus sama dengan panduan, dan server menilai ulang urutan, arah,
+panjang, serta kedekatan jalur. Persentase kecocokan disimpan dalam
+`attempt_answers.accuracy`; goresan yang tidak sesuai mendapat 0 poin.
+Pada soal tanpa panduan, satu atau lebih stroke bebas dengan 2–256 titik per
+stroke (maksimal 16 stroke) mendapat poin penuh tanpa penilaian bentuk.
+`accuracy` dibiarkan kosong karena tidak ada kecocokan yang dihitung.
+Soal tanpa tulisan tetap mendapat 0 poin. Input yang tidak mengikuti format
+menghasilkan HTTP 400.
 
 ## 5. Abandon attempt
 

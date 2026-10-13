@@ -23,9 +23,6 @@ func (s *service) UpsertLessonProgress(ctx context.Context, lessonID, userID uui
 	if err := req.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %v", utils.ErrInvalidLessonProgress, err)
 	}
-	if req.Status != nil && *req.Status == model.StatusCompleted {
-		return nil, utils.ErrLessonCompletionRequiresQuiz
-	}
 
 	progress, err := s.repository.UpsertLessonProgress(ctx, lessonID, userID, req)
 	if err != nil {

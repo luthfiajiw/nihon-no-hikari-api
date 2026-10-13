@@ -9,6 +9,7 @@ import (
 
 type Middleware interface {
 	AuthMiddleware() fiber.Handler
+	RequireRole(role string) fiber.Handler
 }
 
 type middleware struct {

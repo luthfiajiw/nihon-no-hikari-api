@@ -11,6 +11,7 @@ import (
 
 type Service interface {
 	ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) (*ListQuestionSetsResponse, error)
+	ListModuleExams(ctx context.Context, moduleID, userID uuid.UUID) (*ListQuestionSetsResponse, error)
 	GetQuestionSetDetail(ctx context.Context, questionSetID, userID uuid.UUID) (*QuestionSetDetailResponse, error)
 	StartAttempt(ctx context.Context, questionSetID, userID uuid.UUID) (*StartAttemptResponse, error)
 	AbandonAttempt(ctx context.Context, questionSetID, attemptID, userID uuid.UUID) (*AbandonAttemptResponse, error)
@@ -49,6 +50,14 @@ func (s *service) ListQuestionSets(ctx context.Context, lessonID, userID uuid.UU
 	}, nil
 }
 
+func (s *service) ListModuleExams(ctx context.Context, moduleID, userID uuid.UUID) (*ListQuestionSetsResponse, error) {
+	sets, err := s.repository.ListModuleExams(ctx, moduleID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &ListQuestionSetsResponse{Success: true, Message: "berhasil mendapatkan ujian module", Data: sets}, nil
+}
+
 func (s *service) StartAttempt(ctx context.Context, questionSetID, userID uuid.UUID) (*StartAttemptResponse, error) {
 	attempt, err := s.repository.StartAttempt(ctx, questionSetID, userID)
 	if err != nil {
@@ -82,6 +91,8 @@ func (s *service) SubmitAttempt(ctx context.Context, questionSetID, attemptID, u
 	message := "attempt selesai, nilai belum memenuhi syarat kelulusan"
 	if result.LessonStatus == "completed" {
 		message = "selamat, lesson berhasil diselesaikan"
+	} else if result.ModuleStatus == "completed" {
+		message = "selamat, ujian module berhasil diselesaikan"
 	} else if result.IsPassed {
 		message = "attempt lulus, selesaikan question set lainnya"
 	}

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"nihon-no-hikari-api/internal/user"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +43,7 @@ type SignInData struct {
 	DisplayName string      `json:"display_name"`
 	Email       string      `json:"email"`
 	AvatarURL   *string     `json:"avatar_url"`
+	Role        user.Role   `json:"role"`
 	Session     AuthSession `json:"session"`
 }
 

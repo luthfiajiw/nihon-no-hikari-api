@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"nihon-no-hikari-api/internal/course/model"
+	"nihon-no-hikari-api/pkg/contenthtml"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
@@ -21,6 +22,15 @@ type Repository interface {
 }
 
 func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error) {
+	if req.Status != nil && *req.Status == model.StatusCompleted {
+		var hasQuiz bool
+		if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM question_sets WHERE lesson_id=$1 AND kind='practice' AND is_published AND archived_at IS NULL)`, lessonID).Scan(&hasQuiz); err != nil {
+			return nil, err
+		}
+		if hasQuiz {
+			return nil, utils.ErrLessonCompletionRequiresQuiz
+		}
+	}
 	const prerequisiteQuery = `
 		SELECT NOT EXISTS (
 			SELECT 1
@@ -101,6 +111,15 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userI
 }
 
 func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgress, error) {
+	if (req.Status != nil && *req.Status == model.StatusCompleted) || req.BestScore != nil {
+		var hasExam bool
+		if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM question_sets WHERE module_id=$1 AND kind='final_exam' AND is_published AND archived_at IS NULL)`, moduleID).Scan(&hasExam); err != nil {
+			return nil, err
+		}
+		if hasExam {
+			return nil, utils.ErrModuleCompletionRequiresExam
+		}
+	}
 	if req.Status != nil {
 		const prerequisiteQuery = `
 			SELECT NOT EXISTS (
@@ -151,7 +170,7 @@ func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, modul
 			AND m.is_published = true
 			AND c.is_published = true
 		ON CONFLICT (user_id, module_id) DO UPDATE SET
-			status = COALESCE($4::progress_status, progress.status),
+			status = CASE WHEN progress.status = 'completed' THEN progress.status ELSE COALESCE($4::progress_status, progress.status) END,
 			best_score = COALESCE($5::smallint, progress.best_score),
 			unlocked_at = CASE
 				WHEN COALESCE($4::progress_status, progress.status) <> 'locked'
@@ -159,6 +178,7 @@ func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, modul
 				ELSE progress.unlocked_at
 			END,
 			completed_at = CASE
+				WHEN progress.status = 'completed' THEN progress.completed_at
 				WHEN COALESCE($4::progress_status, progress.status) = 'completed'
 					THEN COALESCE(progress.completed_at, now())
 				WHEN $4::progress_status IS NOT NULL THEN NULL
@@ -274,6 +294,11 @@ func (r *dbRepository) GetLessonDetail(ctx context.Context, lessonID uuid.UUID) 
 		}
 		return nil, err
 	}
+	clean, err := contenthtml.JSON([]byte(lesson.Content))
+	if err != nil {
+		return nil, err
+	}
+	lesson.Content = string(clean)
 
 	return &lesson, nil
 }
@@ -465,7 +490,7 @@ func (r *dbRepository) List(ctx context.Context) ([]model.Course, error) {
 		FROM courses c
 		JOIN levels l ON l.id = c.level_id
 		WHERE c.is_published = true
-		ORDER BY l.order_index ASC, c.created_at ASC
+		ORDER BY l.order_index ASC, c.order_index ASC, c.created_at ASC
 	`
 
 	rows, err := r.pool.Query(ctx, query)

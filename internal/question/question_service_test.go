@@ -19,6 +19,10 @@ func (r *serviceRepositoryStub) ListQuestionSets(context.Context, uuid.UUID, uui
 	return nil, nil
 }
 
+func (r *serviceRepositoryStub) ListModuleExams(context.Context, uuid.UUID, uuid.UUID) ([]QuestionSet, error) {
+	return nil, nil
+}
+
 func (r *serviceRepositoryStub) GetQuestionSetDetail(context.Context, uuid.UUID, uuid.UUID) (*QuestionSetDetail, error) {
 	return r.detail, nil
 }

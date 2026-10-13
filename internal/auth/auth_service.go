@@ -167,6 +167,7 @@ func (s *service) SignIn(ctx context.Context, req SignInRequest, userAgent strin
 			DisplayName: userDetail.DisplayName,
 			Email:       userDetail.Email,
 			AvatarURL:   userDetail.AvatarURL,
+			Role:        userDetail.Role,
 			Session: AuthSession{
 				ID:                    session.ID,
 				AccessToken:           accessToken,

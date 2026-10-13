@@ -2,12 +2,10 @@ package course
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/internal/question"
-	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 )
@@ -45,6 +43,10 @@ func (r *questionRepositoryStub) ListQuestionSets(_ context.Context, lessonID, u
 	return r.sets, nil
 }
 
+func (r *questionRepositoryStub) ListModuleExams(context.Context, uuid.UUID, uuid.UUID) ([]question.QuestionSet, error) {
+	return nil, nil
+}
+
 func (r *questionRepositoryStub) GetQuestionSetDetail(context.Context, uuid.UUID, uuid.UUID) (*question.QuestionSetDetail, error) {
 	return nil, nil
 }
@@ -70,17 +72,17 @@ func (r *lessonProgressRepositoryStub) UpsertLessonProgress(context.Context, uui
 	return &model.LessonProgress{}, nil
 }
 
-func TestUpsertLessonProgressRejectsDirectCompletion(t *testing.T) {
+func TestUpsertLessonProgressDelegatesCompletionPolicy(t *testing.T) {
 	repository := &lessonProgressRepositoryStub{}
 	service := NewService(repository, nil)
 	status := model.StatusCompleted
 
 	_, err := service.UpsertLessonProgress(context.Background(), uuid.New(), uuid.New(), model.UpsertLessonProgressRequest{Status: &status})
-	if !errors.Is(err, utils.ErrLessonCompletionRequiresQuiz) {
-		t.Fatalf("UpsertLessonProgress() error = %v, want %v", err, utils.ErrLessonCompletionRequiresQuiz)
+	if err != nil {
+		t.Fatalf("UpsertLessonProgress() error = %v", err)
 	}
-	if repository.upsertCalled {
-		t.Fatal("repository must not be called for direct completion")
+	if !repository.upsertCalled {
+		t.Fatal("repository must decide whether the lesson has a quiz")
 	}
 }
 
@@ -92,7 +94,7 @@ func TestGetLessonDetailIncludesQuestionSets(t *testing.T) {
 		lesson: &model.LessonDetail{ID: lessonID, Slug: "hiragana-a", Title: "Hiragana A"},
 	}
 	questionRepository := &questionRepositoryStub{
-		sets: []question.QuestionSet{{ID: setID, LessonID: lessonID, Title: "Latihan"}},
+		sets: []question.QuestionSet{{ID: setID, LessonID: &lessonID, Title: "Latihan"}},
 	}
 	service := NewService(courseRepository, questionRepository)
 

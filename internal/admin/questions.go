@@ -14,19 +14,19 @@ import (
 )
 
 type optionInput struct {
-	Label     string  `json:"label"`
-	MediaURL  *string `json:"media_url"`
+	Label     string  `json:"label" example:"a"`
+	MediaURL  *string `json:"media_url" example:"https://example.com/option.png"`
 	IsCorrect bool    `json:"is_correct"`
 }
 
 type questionInput struct {
-	QuestionType     string        `json:"question_type"`
-	PromptText       string        `json:"prompt_text"`
+	QuestionType     string        `json:"question_type" enums:"multiple_choice,stroke_writing"`
+	PromptText       string        `json:"prompt_text" example:"Pilih romaji yang tepat."`
 	StimulusText     *string       `json:"stimulus_text"`
 	StimulusMediaURL *string       `json:"stimulus_media_url"`
 	Explanation      *string       `json:"explanation"`
-	Points           int16         `json:"points"`
-	StrokeTemplateID *uuid.UUID    `json:"stroke_template_id"`
+	Points           int16         `json:"points" example:"1"`
+	StrokeTemplateID *uuid.UUID    `json:"stroke_template_id" format:"uuid"`
 	ShowWritingGuide bool          `json:"show_writing_guide"`
 	Options          []optionInput `json:"options"`
 }

@@ -33,6 +33,17 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	group.Patch("/:userId/role", h.changeRole)
 }
 
+// list godoc
+// @Summary Daftar pengguna untuk admin
+// @Description Memerlukan role Admin. Mengambil ID, email, nama tampilan, dan role seluruh pengguna berdasarkan created_at dan id.
+// @Tags Admin Users
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} ListUsersResponse
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/users [get]
 func (h *Handler) list(c fiber.Ctx) error {
 	rows, err := h.pool.Query(c.Context(), `SELECT id, email, display_name, role FROM users ORDER BY created_at, id`)
 	if err != nil {
@@ -54,14 +65,28 @@ func (h *Handler) list(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true, "data": users})
 }
 
+// changeRole godoc
+// @Summary Ubah role pengguna
+// @Description Memerlukan role Admin. Mengubah role menjadi User atau Admin. Role akun sendiri tidak dapat diubah. Perubahan hak akses berlaku pada permintaan berikutnya.
+// @Tags Admin Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param userId path string true "UUID pengguna" Format(uuid)
+// @Param request body ChangeRoleRequest true "Role baru pengguna"
+// @Success 200 {object} ChangeRoleResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/users/{userId}/role [patch]
 func (h *Handler) changeRole(c fiber.Ctx) error {
 	userID, err := uuid.Parse(c.Params("userId"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "ID pengguna tidak valid"})
 	}
-	var request struct {
-		Role Role `json:"role"`
-	}
+	var request ChangeRoleRequest
 	if err := c.Bind().Body(&request); err != nil || (request.Role != RoleUser && request.Role != RoleAdmin) {
 		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "role harus User atau Admin"})
 	}

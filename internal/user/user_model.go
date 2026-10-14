@@ -31,3 +31,17 @@ type FindUserParam struct {
 	ID    uuid.UUID
 	Email string
 }
+
+type ChangeRoleRequest struct {
+	Role Role `json:"role" enums:"User,Admin" binding:"required" example:"Admin"`
+}
+
+type ListUsersResponse struct {
+	Success bool      `json:"success" example:"true"`
+	Data    []Summary `json:"data"`
+}
+
+type ChangeRoleResponse struct {
+	Success bool    `json:"success" example:"true"`
+	Data    Summary `json:"data"`
+}

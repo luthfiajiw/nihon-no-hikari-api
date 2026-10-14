@@ -1,0 +1,17 @@
+basePath: /api/v1
+info:
+  contact: {}
+  description: REST API untuk platform pembelajaran Nihon no Hikari.
+  title: Nihon no Hikari API
+  version: "1.0"
+paths: {}
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: 'Masukkan access token dengan format: Bearer {token}'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

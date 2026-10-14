@@ -33,7 +33,7 @@ var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
 	g := app.Group("/api/v1/admin", h.middleware.AuthMiddleware(), h.middleware.RequireRole("Admin"))
-	g.Get("/me", func(c fiber.Ctx) error { return c.JSON(fiber.Map{"success": true, "role": "Admin"}) })
+	g.Get("/me", h.me)
 	g.Get("/catalog", h.catalog)
 	g.Get("/levels", h.levels)
 	g.Get("/templates", h.templates)
@@ -67,6 +67,9 @@ func bad(c fiber.Ctx, message string) error {
 }
 
 func serverError(c fiber.Ctx, err error) error {
+	if errors.Is(err, errInvalidPrerequisites) {
+		return bad(c, err.Error())
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c.Status(404).JSON(utils.ErrorRes{Success: false, Error: "konten tidak ditemukan"})
 	}
@@ -98,6 +101,33 @@ func (h *Handler) rows(ctx context.Context, query string, args ...any) ([]json.R
 	return items, rows.Err()
 }
 
+// me godoc
+// @Summary Periksa akses admin
+// @Description Memastikan sesi pengguna memiliki role Admin.
+// @Tags Admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} MeResponse
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Router /admin/me [get]
+func (h *Handler) me(c fiber.Ctx) error {
+	return c.JSON(fiber.Map{"success": true, "role": "Admin"})
+}
+
+// catalog godoc
+// @Summary Katalog konten admin
+// @Description Memerlukan role Admin. Mengambil konten termasuk draft dan arsip. Jika course_id diisi, hanya modules dan lessons kursus tersebut yang dikembalikan; courses dan question_sets berupa array kosong.
+// @Tags Admin
+// @Produce json
+// @Security BearerAuth
+// @Param course_id query string false "Filter UUID kursus" Format(uuid)
+// @Success 200 {object} CatalogResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/catalog [get]
 func (h *Handler) catalog(c fiber.Ctx) error {
 	data := map[string][]json.RawMessage{}
 	var courseID *uuid.UUID
@@ -136,6 +166,17 @@ func (h *Handler) catalog(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true, "data": data})
 }
 
+// levels godoc
+// @Summary Daftar level untuk admin
+// @Description Memerlukan role Admin. Mengambil level berdasarkan order_index.
+// @Tags Admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} LevelsResponse
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/levels [get]
 func (h *Handler) levels(c fiber.Ctx) error {
 	items, err := h.rows(c.Context(), `SELECT to_jsonb(t) FROM public.levels t ORDER BY order_index`)
 	if err != nil {
@@ -144,6 +185,17 @@ func (h *Handler) levels(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true, "data": items})
 }
 
+// templates godoc
+// @Summary Daftar template goresan untuk admin
+// @Description Memerlukan role Admin. Mengambil metadata template kana untuk stroke_template_id; tidak menyertakan stroke_data.
+// @Tags Admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} TemplatesResponse
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/templates [get]
 func (h *Handler) templates(c fiber.Ctx) error {
 	items, err := h.rows(c.Context(), `SELECT jsonb_build_object('id',id,'character',character,'romaji',romaji,'script',script,'source_version',source_version) FROM public.kana_stroke_templates ORDER BY script,character,source_version DESC`)
 	if err != nil {
@@ -152,6 +204,19 @@ func (h *Handler) templates(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true, "data": items})
 }
 
+// preview godoc
+// @Summary Pratinjau konten lesson
+// @Description Memerlukan role Admin. Membersihkan HTML content dan merapikan tips tanpa menyimpan konten. Field tambahan pada objek content dipertahankan. Content kosong/null menjadi objek dengan content dan tips kosong; string HTML lama juga diterima.
+// @Tags Admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body PreviewRequest true "Konten lesson untuk pratinjau"
+// @Success 200 {object} PreviewResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Router /admin/lesson-content/preview [post]
 func (h *Handler) preview(c fiber.Ctx) error {
 	var body struct {
 		Content json.RawMessage `json:"content"`
@@ -166,6 +231,19 @@ func (h *Handler) preview(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true, "data": json.RawMessage(clean)})
 }
 
+// list godoc
+// @Summary Daftar konten admin
+// @Description Memerlukan role Admin. Mengambil seluruh resource sesuai kind, termasuk yang belum diterbitkan dan diarsipkan, berdasarkan order_index, created_at, dan id. Content lesson tidak disertakan; course menyertakan module_count dan lesson_count.
+// @Tags Admin Content
+// @Produce json
+// @Security BearerAuth
+// @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
+// @Success 200 {object} ContentListResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/content/{kind} [get]
 func (h *Handler) list(c fiber.Ctx) error {
 	name, ok := table(c.Params("kind"))
 	if !ok {
@@ -182,6 +260,21 @@ func (h *Handler) list(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true, "data": items})
 }
 
+// detail godoc
+// @Summary Detail konten dan draft admin
+// @Description Memerlukan role Admin. Data berisi resource tersimpan dan draft berisi perubahan yang belum diterbitkan, atau null. Content lesson disanitasi. Question set menyertakan seluruh soal dan pilihan beserta jawaban benar.
+// @Tags Admin Content
+// @Produce json
+// @Security BearerAuth
+// @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
+// @Param id path string true "UUID resource" Format(uuid)
+// @Success 200 {object} ContentDetailResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/content/{kind}/{id} [get]
 func (h *Handler) detail(c fiber.Ctx) error {
 	name, ok := table(c.Params("kind"))
 	if !ok {
@@ -192,7 +285,11 @@ func (h *Handler) detail(c fiber.Ctx) error {
 		return bad(c, "ID tidak valid")
 	}
 	var live json.RawMessage
-	err = h.pool.QueryRow(c.Context(), fmt.Sprintf(`SELECT to_jsonb(t) FROM public.%s t WHERE id=$1`, name), id).Scan(&live)
+	projection := "to_jsonb(t)"
+	if kind := c.Params("kind"); kind == "module" || kind == "lesson" {
+		projection += fmt.Sprintf(` || jsonb_build_object('%s_prerequisites', COALESCE((SELECT jsonb_agg(p.required_%s_id ORDER BY p.required_%s_id) FROM %s_prerequisites p WHERE p.%s_id=t.id), '[]'::jsonb))`, kind, kind, kind, kind, kind)
+	}
+	err = h.pool.QueryRow(c.Context(), fmt.Sprintf(`SELECT %s FROM public.%s t WHERE id=$1`, projection, name), id).Scan(&live)
 	if err != nil {
 		return serverError(c, err)
 	}
@@ -221,18 +318,20 @@ func (h *Handler) detail(c fiber.Ctx) error {
 }
 
 type coreInput struct {
-	LevelID          uuid.UUID       `json:"level_id"`
-	CourseID         uuid.UUID       `json:"course_id"`
-	ModuleID         uuid.UUID       `json:"module_id"`
-	Slug             string          `json:"slug"`
-	Title            string          `json:"title"`
-	Description      *string         `json:"description"`
-	ThumbnailURL     *string         `json:"thumbnail_url"`
-	OrderIndex       int16           `json:"order_index"`
-	IsMandatory      bool            `json:"is_mandatory"`
-	IsEntry          bool            `json:"is_entry"`
-	EstimatedMinutes *int32          `json:"estimated_minutes"`
-	Content          json.RawMessage `json:"content"`
+	LevelID             uuid.UUID       `json:"level_id"`
+	CourseID            uuid.UUID       `json:"course_id"`
+	ModuleID            uuid.UUID       `json:"module_id"`
+	Slug                string          `json:"slug"`
+	Title               string          `json:"title"`
+	Description         *string         `json:"description"`
+	ThumbnailURL        *string         `json:"thumbnail_url"`
+	OrderIndex          int16           `json:"order_index"`
+	IsMandatory         bool            `json:"is_mandatory"`
+	IsEntry             bool            `json:"is_entry"`
+	EstimatedMinutes    *int32          `json:"estimated_minutes"`
+	Content             json.RawMessage `json:"content"`
+	ModulePrerequisites []uuid.UUID     `json:"module_prerequisites"`
+	LessonPrerequisites []uuid.UUID     `json:"lesson_prerequisites"`
 }
 
 func parseCore(kind string, raw []byte) (coreInput, error) {
@@ -271,10 +370,18 @@ func parseCore(kind string, raw []byte) (coreInput, error) {
 	if v.EstimatedMinutes != nil && *v.EstimatedMinutes < 0 {
 		return v, errors.New("estimasi waktu tidak valid")
 	}
+	for _, requiredID := range v.prerequisites(kind) {
+		if requiredID == uuid.Nil {
+			return v, errors.New("ID prasyarat tidak valid")
+		}
+	}
 	return v, nil
 }
 
 func saveCore(ctx context.Context, tx pgx.Tx, kind string, id uuid.UUID, v coreInput, create bool) error {
+	if err := validatePrerequisites(ctx, tx, kind, id, v.prerequisites(kind)); err != nil {
+		return err
+	}
 	switch kind {
 	case "course":
 		if create {
@@ -289,7 +396,10 @@ func saveCore(ctx context.Context, tx pgx.Tx, kind string, id uuid.UUID, v coreI
 				return err
 			}
 			_, err := tx.Exec(ctx, `INSERT INTO modules(id,course_id,slug,title,description,order_index,is_mandatory,is_entry,estimated_minutes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, v.CourseID, v.Slug, v.Title, v.Description, v.OrderIndex, v.IsMandatory, v.IsEntry, v.EstimatedMinutes)
-			return err
+			if err != nil {
+				return err
+			}
+			return savePrerequisites(ctx, tx, kind, id, v.ModulePrerequisites)
 		}
 		var oldCourse uuid.UUID
 		var oldOrder int16
@@ -316,18 +426,43 @@ func saveCore(ctx context.Context, tx pgx.Tx, kind string, id uuid.UUID, v coreI
 			}
 		}
 		_, err := tx.Exec(ctx, `UPDATE modules SET course_id=$2,slug=$3,title=$4,description=$5,order_index=$6,is_mandatory=$7,is_entry=$8,estimated_minutes=$9,updated_at=now() WHERE id=$1`, id, v.CourseID, v.Slug, v.Title, v.Description, v.OrderIndex, v.IsMandatory, v.IsEntry, v.EstimatedMinutes)
-		return err
-	case "lesson":
-		if create {
-			_, err := tx.Exec(ctx, `INSERT INTO lessons(id,module_id,slug,title,content,order_index) VALUES($1,$2,$3,$4,$5::jsonb,$6)`, id, v.ModuleID, v.Slug, v.Title, string(v.Content), v.OrderIndex)
+		if err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `UPDATE lessons SET module_id=$2,slug=$3,title=$4,content=$5::jsonb,order_index=$6,updated_at=now() WHERE id=$1`, id, v.ModuleID, v.Slug, v.Title, string(v.Content), v.OrderIndex)
-		return err
+		return savePrerequisites(ctx, tx, kind, id, v.ModulePrerequisites)
+	case "lesson":
+		if create {
+			_, err := tx.Exec(ctx, `INSERT INTO lessons(id,module_id,slug,title,content,order_index,is_entry) VALUES($1,$2,$3,$4,$5::jsonb,$6,$7)`, id, v.ModuleID, v.Slug, v.Title, string(v.Content), v.OrderIndex, v.IsEntry)
+			if err != nil {
+				return err
+			}
+			return savePrerequisites(ctx, tx, kind, id, v.LessonPrerequisites)
+		}
+		_, err := tx.Exec(ctx, `UPDATE lessons SET module_id=$2,slug=$3,title=$4,content=$5::jsonb,order_index=$6,is_entry=$7,updated_at=now() WHERE id=$1`, id, v.ModuleID, v.Slug, v.Title, string(v.Content), v.OrderIndex, v.IsEntry)
+		if err != nil {
+			return err
+		}
+		return savePrerequisites(ctx, tx, kind, id, v.LessonPrerequisites)
 	}
 	return errors.New("jenis konten tidak valid")
 }
 
+// create godoc
+// @Summary Buat konten admin
+// @Description Memerlukan role Admin. Membuat resource yang belum diterbitkan. Kirim field sesuai kind: course memerlukan level_id dan slug; module memerlukan course_id dan slug; lesson memerlukan module_id dan slug. Title wajib untuk semua jenis. Question_set memerlukan kind (practice dengan lesson_id saja, atau final_exam dengan module_id saja) dan skill (reading/writing); questions disimpan sebagai draft dan boleh belum lengkap. Validasi soal lengkap dilakukan saat publish.
+// @Tags Admin Content
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
+// @Param request body ContentRequest true "Payload lengkap sesuai jenis resource"
+// @Success 201 {object} CreateResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/content/{kind} [post]
 func (h *Handler) create(c fiber.Ctx) error {
 	kind := c.Params("kind")
 	if _, ok := table(kind); !ok {
@@ -355,6 +490,24 @@ func (h *Handler) create(c fiber.Ctx) error {
 	return c.Status(201).JSON(fiber.Map{"success": true, "id": id})
 }
 
+// update godoc
+// @Summary Perbarui konten admin
+// @Description Memerlukan role Admin. Kirim payload lengkap sesuai kind seperti pada create; PATCH tidak menggabungkan field dengan data lama. Course/module/lesson yang sudah terbit disimpan sebagai draft; yang belum terbit diperbarui langsung. Question_set selalu menyimpan payload sebagai draft. Respons draft menunjukkan apakah resource sudah terbit. Kind, skill, dan penempatan question_set terbit tidak dapat diubah; versi belum terbit yang memiliki attempt tidak dapat diedit (409).
+// @Tags Admin Content
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
+// @Param id path string true "UUID resource" Format(uuid)
+// @Param request body ContentRequest true "Payload lengkap sesuai jenis resource"
+// @Success 200 {object} UpdateResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/content/{kind}/{id} [patch]
 func (h *Handler) update(c fiber.Ctx) error {
 	kind := c.Params("kind")
 	if _, ok := table(kind); !ok {
@@ -382,6 +535,9 @@ func (h *Handler) update(c fiber.Ctx) error {
 		return serverError(c, err)
 	}
 	if published {
+		if err := validatePrerequisites(c.Context(), tx, kind, id, v.prerequisites(kind)); err != nil {
+			return serverError(c, err)
+		}
 		payload, _ := json.Marshal(v)
 		_, err = tx.Exec(c.Context(), `INSERT INTO admin_drafts(resource_type,resource_id,payload) VALUES($1,$2,$3::jsonb) ON CONFLICT(resource_type,resource_id) DO UPDATE SET payload=EXCLUDED.payload,updated_at=now()`, kind, id, string(payload))
 	} else {
@@ -396,6 +552,22 @@ func (h *Handler) update(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true, "draft": published})
 }
 
+// publish godoc
+// @Summary Terbitkan konten admin
+// @Description Memerlukan role Admin. Menerapkan draft lalu menerbitkan resource; arsip harus dipulihkan terlebih dahulu. Question_set wajib memiliki soal valid: reading memakai multiple_choice dengan minimal dua pilihan dan tepat satu jawaban benar; writing memakai stroke_writing dengan stroke_template_id dan tanpa pilihan. Setiap soal memerlukan prompt, poin positif, dan stimulus atau template. Menerbitkan perubahan question_set yang sudah terbit membuat versi baru dalam lineage yang sama; respons id adalah UUID versi aktif dan dapat berbeda dari id permintaan. Konflik versi atau konfigurasi unik menghasilkan 409.
+// @Tags Admin Content
+// @Produce json
+// @Security BearerAuth
+// @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
+// @Param id path string true "UUID resource" Format(uuid)
+// @Success 200 {object} PublishResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/content/{kind}/{id}/publish [post]
 func (h *Handler) publish(c fiber.Ctx) error {
 	kind := c.Params("kind")
 	if _, ok := table(kind); !ok {
@@ -447,6 +619,21 @@ func (h *Handler) publish(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true})
 }
 
+// remove godoc
+// @Summary Hapus atau arsipkan konten admin
+// @Description Memerlukan role Admin. Menghapus resource jika tidak memiliki riwayat atau relasi yang menghalangi penghapusan; jika ada, mengarsipkan dan menonaktifkan publikasi. Draft dihapus. Respons archived menunjukkan apakah resource diarsipkan.
+// @Tags Admin Content
+// @Produce json
+// @Security BearerAuth
+// @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
+// @Param id path string true "UUID resource" Format(uuid)
+// @Success 200 {object} RemoveResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/content/{kind}/{id} [delete]
 func (h *Handler) remove(c fiber.Ctx) error {
 	kind := c.Params("kind")
 	name, ok := table(kind)
@@ -504,6 +691,21 @@ func (h *Handler) remove(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true, "archived": used})
 }
 
+// restore godoc
+// @Summary Pulihkan konten yang diarsipkan
+// @Description Memerlukan role Admin. Menghapus status arsip dan menjadikan resource belum diterbitkan. Resource yang tidak ditemukan atau tidak diarsipkan menghasilkan 404.
+// @Tags Admin Content
+// @Produce json
+// @Security BearerAuth
+// @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
+// @Param id path string true "UUID resource" Format(uuid)
+// @Success 200 {object} StatusResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/content/{kind}/{id}/restore [post]
 func (h *Handler) restore(c fiber.Ctx) error {
 	name, ok := table(c.Params("kind"))
 	if !ok {

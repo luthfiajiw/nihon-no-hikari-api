@@ -1,5 +1,353 @@
 basePath: /api/v1
 definitions:
+  internal_admin.CatalogData:
+    properties:
+      courses:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      lessons:
+        description: Lesson hanya memuat id, module_id, title, slug, order_index,
+          is_published, dan archived_at.
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      modules:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      question_sets:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+    type: object
+  internal_admin.CatalogResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_admin.CatalogData'
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.ContentDetailResponse:
+    properties:
+      data:
+        additionalProperties: true
+        description: Kolom resource sesuai kind; question_set menyertakan questions,
+          options, dan is_correct.
+        type: object
+      draft:
+        allOf:
+        - $ref: '#/definitions/internal_admin.ContentRequest'
+        description: Payload perubahan yang belum diterbitkan, atau null jika tidak
+          ada draft.
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.ContentListResponse:
+    properties:
+      data:
+        description: Kolom resource sesuai kind, tanpa content lesson; course menyertakan
+          module_count dan lesson_count.
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.ContentRequest:
+    properties:
+      content:
+        allOf:
+        - $ref: '#/definitions/internal_admin.LessonContent'
+        description: Untuk lesson; HTML disanitasi. Jika kosong, content dan tips
+          menjadi string kosong.
+      cooldown_minutes:
+        minimum: 0
+        type: integer
+      course_id:
+        description: Wajib untuk module.
+        format: uuid
+        type: string
+      description:
+        description: Untuk course dan module.
+        type: string
+      estimated_minutes:
+        minimum: 0
+        type: integer
+      is_entry:
+        description: Untuk module dan lesson.
+        type: boolean
+      is_mandatory:
+        description: Untuk module.
+        type: boolean
+      kind:
+        description: Field berikut hanya untuk question_set. Kind dan skill wajib
+          diisi.
+        enum:
+        - practice
+        - final_exam
+        type: string
+      lesson_id:
+        description: Wajib untuk question_set practice; kosong untuk final_exam.
+        format: uuid
+        type: string
+      lesson_prerequisites:
+        description: Daftar UUID lesson prasyarat. [] menghapus semua prasyarat; null/tidak
+          dikirim mempertahankan relasi.
+        items:
+          type: string
+        type: array
+      level_id:
+        description: Wajib untuk course.
+        format: uuid
+        type: string
+      max_attempts:
+        description: Null berarti tanpa batas attempt.
+        minimum: 1
+        type: integer
+      module_id:
+        description: Wajib untuk lesson atau question_set final_exam; kosong untuk
+          practice.
+        format: uuid
+        type: string
+      module_prerequisites:
+        description: Daftar UUID module prasyarat. [] menghapus semua prasyarat; null/tidak
+          dikirim mempertahankan relasi.
+        items:
+          type: string
+        type: array
+      order_index:
+        example: 0
+        minimum: 0
+        type: integer
+      passing_score:
+        example: 70
+        maximum: 100
+        minimum: 0
+        type: integer
+      questions:
+        description: Boleh kosong saat menyimpan draft. Saat publish wajib ada soal
+          valid.
+        items:
+          $ref: '#/definitions/internal_admin.questionInput'
+        type: array
+      shuffle_questions:
+        type: boolean
+      skill:
+        enum:
+        - reading
+        - writing
+        type: string
+      slug:
+        description: Wajib untuk course, module, dan lesson; huruf kecil, angka, dan
+          tanda hubung.
+        example: hiragana-dasar
+        maxLength: 120
+        type: string
+      thumbnail_url:
+        description: Untuk course; URL HTTP/HTTPS.
+        example: https://example.com/thumbnail.png
+        type: string
+      time_limit_seconds:
+        description: Null atau 0 berarti tanpa batas waktu.
+        minimum: 0
+        type: integer
+      title:
+        example: Hiragana dasar
+        maxLength: 160
+        type: string
+      total_questions:
+        description: Null berarti semua soal; saat publish tidak boleh melebihi jumlah
+          soal tersedia.
+        minimum: 1
+        type: integer
+    required:
+    - title
+    type: object
+  internal_admin.CreateResponse:
+    properties:
+      id:
+        format: uuid
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.LessonContent:
+    properties:
+      content:
+        example: <p>Belajar huruf hiragana.</p>
+        type: string
+      tips:
+        example: Latih setiap hari.
+        type: string
+    type: object
+  internal_admin.Level:
+    properties:
+      code:
+        example: N5
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        format: uuid
+        type: string
+      name:
+        type: string
+      order_index:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  internal_admin.LevelsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_admin.Level'
+        type: array
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.MeResponse:
+    properties:
+      role:
+        enum:
+        - Admin
+        example: Admin
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.PreviewRequest:
+    properties:
+      content:
+        $ref: '#/definitions/internal_admin.LessonContent'
+    type: object
+  internal_admin.PreviewResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_admin.LessonContent'
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.PublishResponse:
+    properties:
+      id:
+        description: Hanya untuk question_set; dapat berubah saat versi baru diterbitkan.
+        format: uuid
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.RemoveResponse:
+    properties:
+      archived:
+        description: True jika diarsipkan karena memiliki riwayat atau relasi; false
+          jika dihapus permanen.
+        type: boolean
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.StatusResponse:
+    properties:
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.StrokeTemplate:
+    properties:
+      character:
+        example: あ
+        type: string
+      id:
+        format: uuid
+        type: string
+      romaji:
+        example: a
+        type: string
+      script:
+        enum:
+        - hiragana
+        - katakana
+        type: string
+      source_version:
+        type: string
+    type: object
+  internal_admin.TemplatesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_admin.StrokeTemplate'
+        type: array
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.UpdateResponse:
+    properties:
+      draft:
+        description: True jika konten sudah diterbitkan. Perubahan question_set selalu
+          disimpan sebagai draft.
+        type: boolean
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_admin.optionInput:
+    properties:
+      is_correct:
+        type: boolean
+      label:
+        example: a
+        type: string
+      media_url:
+        example: https://example.com/option.png
+        type: string
+    type: object
+  internal_admin.questionInput:
+    properties:
+      explanation:
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/internal_admin.optionInput'
+        type: array
+      points:
+        example: 1
+        type: integer
+      prompt_text:
+        example: Pilih romaji yang tepat.
+        type: string
+      question_type:
+        enum:
+        - multiple_choice
+        - stroke_writing
+        type: string
+      show_writing_guide:
+        type: boolean
+      stimulus_media_url:
+        type: string
+      stimulus_text:
+        type: string
+      stroke_template_id:
+        format: uuid
+        type: string
+    type: object
   internal_auth.AuthSession:
     properties:
       access_token:
@@ -50,6 +398,8 @@ definitions:
         type: string
       id:
         type: string
+      role:
+        $ref: '#/definitions/nihon-no-hikari-api_internal_user.Role'
       session:
         $ref: '#/definitions/internal_auth.AuthSession'
     type: object
@@ -135,6 +485,8 @@ definitions:
       is_passed:
         type: boolean
       lesson_status:
+        type: string
+      module_status:
         type: string
       passing_score:
         type: integer
@@ -223,6 +575,8 @@ definitions:
         type: string
       max_attempts:
         type: integer
+      module_id:
+        type: string
       order_index:
         type: integer
       passing_score:
@@ -254,6 +608,8 @@ definitions:
         type: string
       max_attempts:
         type: integer
+      module_id:
+        type: string
       order_index:
         type: integer
       passing_score:
@@ -374,6 +730,55 @@ definitions:
         type: array
       view_box:
         type: number
+    type: object
+  internal_user.ChangeRoleRequest:
+    properties:
+      role:
+        allOf:
+        - $ref: '#/definitions/internal_user.Role'
+        enum:
+        - User
+        - Admin
+        example: Admin
+    required:
+    - role
+    type: object
+  internal_user.ChangeRoleResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_user.Summary'
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_user.ListUsersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_user.Summary'
+        type: array
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_user.Role:
+    enum:
+    - User
+    - Admin
+    type: string
+    x-enum-varnames:
+    - RoleUser
+    - RoleAdmin
+  internal_user.Summary:
+    properties:
+      display_name:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      role:
+        $ref: '#/definitions/internal_user.Role'
     type: object
   nihon-no-hikari-api_internal_course_model.Course:
     properties:
@@ -608,6 +1013,8 @@ definitions:
         type: string
       max_attempts:
         type: integer
+      module_id:
+        type: string
       order_index:
         type: integer
       passing_score:
@@ -639,6 +1046,14 @@ definitions:
     x-enum-varnames:
     - SkillReading
     - SkillWriting
+  nihon-no-hikari-api_internal_user.Role:
+    enum:
+    - User
+    - Admin
+    type: string
+    x-enum-varnames:
+    - RoleUser
+    - RoleAdmin
   nihon-no-hikari-api_pkg_utils.ErrorRes:
     properties:
       error:
@@ -659,6 +1074,640 @@ info:
   title: Nihon no Hikari API
   version: "1.0"
 paths:
+  /admin/catalog:
+    get:
+      description: Memerlukan role Admin. Mengambil konten termasuk draft dan arsip.
+        Jika course_id diisi, hanya modules dan lessons kursus tersebut yang dikembalikan;
+        courses dan question_sets berupa array kosong.
+      parameters:
+      - description: Filter UUID kursus
+        format: uuid
+        in: query
+        name: course_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.CatalogResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Katalog konten admin
+      tags:
+      - Admin
+  /admin/content/{kind}:
+    get:
+      description: Memerlukan role Admin. Mengambil seluruh resource sesuai kind,
+        termasuk yang belum diterbitkan dan diarsipkan, berdasarkan order_index, created_at,
+        dan id. Content lesson tidak disertakan; course menyertakan module_count dan
+        lesson_count.
+      parameters:
+      - description: Jenis resource
+        enum:
+        - course
+        - module
+        - lesson
+        - question_set
+        in: path
+        name: kind
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.ContentListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Daftar konten admin
+      tags:
+      - Admin Content
+    post:
+      consumes:
+      - application/json
+      description: 'Memerlukan role Admin. Membuat resource yang belum diterbitkan.
+        Kirim field sesuai kind: course memerlukan level_id dan slug; module memerlukan
+        course_id dan slug; lesson memerlukan module_id dan slug. Title wajib untuk
+        semua jenis. Question_set memerlukan kind (practice dengan lesson_id saja,
+        atau final_exam dengan module_id saja) dan skill (reading/writing); questions
+        disimpan sebagai draft dan boleh belum lengkap. Validasi soal lengkap dilakukan
+        saat publish.'
+      parameters:
+      - description: Jenis resource
+        enum:
+        - course
+        - module
+        - lesson
+        - question_set
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: Payload lengkap sesuai jenis resource
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_admin.ContentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_admin.CreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Buat konten admin
+      tags:
+      - Admin Content
+  /admin/content/{kind}/{id}:
+    delete:
+      description: Memerlukan role Admin. Menghapus resource jika tidak memiliki riwayat
+        atau relasi yang menghalangi penghapusan; jika ada, mengarsipkan dan menonaktifkan
+        publikasi. Draft dihapus. Respons archived menunjukkan apakah resource diarsipkan.
+      parameters:
+      - description: Jenis resource
+        enum:
+        - course
+        - module
+        - lesson
+        - question_set
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: UUID resource
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.RemoveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Hapus atau arsipkan konten admin
+      tags:
+      - Admin Content
+    get:
+      description: Memerlukan role Admin. Data berisi resource tersimpan dan draft
+        berisi perubahan yang belum diterbitkan, atau null. Content lesson disanitasi.
+        Question set menyertakan seluruh soal dan pilihan beserta jawaban benar.
+      parameters:
+      - description: Jenis resource
+        enum:
+        - course
+        - module
+        - lesson
+        - question_set
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: UUID resource
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.ContentDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Detail konten dan draft admin
+      tags:
+      - Admin Content
+    patch:
+      consumes:
+      - application/json
+      description: Memerlukan role Admin. Kirim payload lengkap sesuai kind seperti
+        pada create; PATCH tidak menggabungkan field dengan data lama. Course/module/lesson
+        yang sudah terbit disimpan sebagai draft; yang belum terbit diperbarui langsung.
+        Question_set selalu menyimpan payload sebagai draft. Respons draft menunjukkan
+        apakah resource sudah terbit. Kind, skill, dan penempatan question_set terbit
+        tidak dapat diubah; versi belum terbit yang memiliki attempt tidak dapat diedit
+        (409).
+      parameters:
+      - description: Jenis resource
+        enum:
+        - course
+        - module
+        - lesson
+        - question_set
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: UUID resource
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Payload lengkap sesuai jenis resource
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_admin.ContentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.UpdateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Perbarui konten admin
+      tags:
+      - Admin Content
+  /admin/content/{kind}/{id}/publish:
+    post:
+      description: 'Memerlukan role Admin. Menerapkan draft lalu menerbitkan resource;
+        arsip harus dipulihkan terlebih dahulu. Question_set wajib memiliki soal valid:
+        reading memakai multiple_choice dengan minimal dua pilihan dan tepat satu
+        jawaban benar; writing memakai stroke_writing dengan stroke_template_id dan
+        tanpa pilihan. Setiap soal memerlukan prompt, poin positif, dan stimulus atau
+        template. Menerbitkan perubahan question_set yang sudah terbit membuat versi
+        baru dalam lineage yang sama; respons id adalah UUID versi aktif dan dapat
+        berbeda dari id permintaan. Konflik versi atau konfigurasi unik menghasilkan
+        409.'
+      parameters:
+      - description: Jenis resource
+        enum:
+        - course
+        - module
+        - lesson
+        - question_set
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: UUID resource
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.PublishResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Terbitkan konten admin
+      tags:
+      - Admin Content
+  /admin/content/{kind}/{id}/restore:
+    post:
+      description: Memerlukan role Admin. Menghapus status arsip dan menjadikan resource
+        belum diterbitkan. Resource yang tidak ditemukan atau tidak diarsipkan menghasilkan
+        404.
+      parameters:
+      - description: Jenis resource
+        enum:
+        - course
+        - module
+        - lesson
+        - question_set
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: UUID resource
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.StatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Pulihkan konten yang diarsipkan
+      tags:
+      - Admin Content
+  /admin/lesson-content/preview:
+    post:
+      consumes:
+      - application/json
+      description: Memerlukan role Admin. Membersihkan HTML content dan merapikan
+        tips tanpa menyimpan konten. Field tambahan pada objek content dipertahankan.
+        Content kosong/null menjadi objek dengan content dan tips kosong; string HTML
+        lama juga diterima.
+      parameters:
+      - description: Konten lesson untuk pratinjau
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_admin.PreviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.PreviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Pratinjau konten lesson
+      tags:
+      - Admin
+  /admin/levels:
+    get:
+      description: Memerlukan role Admin. Mengambil level berdasarkan order_index.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.LevelsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Daftar level untuk admin
+      tags:
+      - Admin
+  /admin/me:
+    get:
+      description: Memastikan sesi pengguna memiliki role Admin.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.MeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Periksa akses admin
+      tags:
+      - Admin
+  /admin/templates:
+    get:
+      description: Memerlukan role Admin. Mengambil metadata template kana untuk stroke_template_id;
+        tidak menyertakan stroke_data.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.TemplatesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Daftar template goresan untuk admin
+      tags:
+      - Admin
+  /admin/users:
+    get:
+      description: Memerlukan role Admin. Mengambil ID, email, nama tampilan, dan
+        role seluruh pengguna berdasarkan created_at dan id.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_user.ListUsersResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Daftar pengguna untuk admin
+      tags:
+      - Admin Users
+  /admin/users/{userId}/role:
+    patch:
+      consumes:
+      - application/json
+      description: Memerlukan role Admin. Mengubah role menjadi User atau Admin. Role
+        akun sendiri tidak dapat diubah. Perubahan hak akses berlaku pada permintaan
+        berikutnya.
+      parameters:
+      - description: UUID pengguna
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: Role baru pengguna
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_user.ChangeRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_user.ChangeRoleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Ubah role pengguna
+      tags:
+      - Admin Users
   /auth/register:
     post:
       consumes:

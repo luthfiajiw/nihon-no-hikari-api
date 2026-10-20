@@ -394,7 +394,15 @@ func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID u
 	attempt.QuestionSet.AttemptsUsed++
 
 	for _, item := range questions {
-		if _, err := tx.Exec(ctx, `INSERT INTO attempt_answers (attempt_id, question_id) VALUES ($1, $2)`, attempt.ID, item.ID); err != nil {
+		snapshot, err := encodeWritingSnapshot(item)
+		if err != nil {
+			return nil, err
+		}
+		var snapshotJSON any
+		if snapshot != nil {
+			snapshotJSON = string(snapshot)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO attempt_answers (attempt_id, question_id, writing_guide_snapshot) VALUES ($1, $2, $3::jsonb)`, attempt.ID, item.ID, snapshotJSON); err != nil {
 			return nil, err
 		}
 	}
@@ -585,8 +593,8 @@ func assignWritingGuide(item *Question, character, romaji *string, strokeData []
 	if err := json.Unmarshal(strokeData, guide); err != nil {
 		return fmt.Errorf("decode writing guide: %w", err)
 	}
-	if guide.ViewBox != 109 || len(guide.Strokes) == 0 {
-		return utils.ErrInvalidQuestionConfiguration
+	if err := validateWritingGuide(guide); err != nil {
+		return err
 	}
 	item.WritingGuide = guide
 	return nil
@@ -675,10 +683,9 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 
 	const questionsQuery = `
 		SELECT q.id, q.question_type, q.skill, q.explanation, q.points,
-			t.character, t.romaji, t.stroke_data, q.show_writing_guide
+			aa.writing_guide_snapshot, q.show_writing_guide
 		FROM attempt_answers aa
 		JOIN questions q ON q.id = aa.question_id
-		LEFT JOIN kana_stroke_templates t ON t.id = q.stroke_template_id
 		WHERE aa.attempt_id = $1
 		ORDER BY q.order_index, q.id
 	`
@@ -689,19 +696,18 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 	questions := make([]gradingQuestion, 0)
 	for rows.Next() {
 		var item gradingQuestion
-		var character, romaji *string
-		var strokeData []byte
-		if err := rows.Scan(&item.ID, &item.QuestionType, &item.Skill, &item.Explanation, &item.Points, &character, &romaji, &strokeData, &item.ShowWritingGuide); err != nil {
+		var snapshot []byte
+		if err := rows.Scan(&item.ID, &item.QuestionType, &item.Skill, &item.Explanation, &item.Points, &snapshot, &item.ShowWritingGuide); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		if item.QuestionType == QuestionTypeStrokeWriting {
-			question := Question{QuestionType: item.QuestionType}
-			if err := assignWritingGuide(&question, character, romaji, strokeData); err != nil {
+			guide, err := decodeWritingSnapshot(snapshot)
+			if err != nil {
 				rows.Close()
 				return nil, err
 			}
-			item.Guide = question.WritingGuide
+			item.Guide = guide
 		}
 		questions = append(questions, item)
 	}

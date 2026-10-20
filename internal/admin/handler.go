@@ -37,9 +37,14 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	g.Get("/catalog", h.catalog)
 	g.Get("/levels", h.levels)
 	g.Get("/templates", h.templates)
+	g.Get("/templates/:id", h.templateDetail)
+	g.Post("/templates/preview", h.previewTemplate)
+	g.Post("/templates", h.createTemplate)
+	g.Patch("/templates/:id", h.updateTemplate)
 	g.Post("/lesson-content/preview", h.preview)
 	g.Get("/content/:kind", h.list)
 	g.Post("/content/:kind", h.create)
+	g.Post("/content/:kind/reorder", h.reorder)
 	g.Get("/content/:kind/:id", h.detail)
 	g.Patch("/content/:kind/:id", h.update)
 	g.Delete("/content/:kind/:id", h.remove)
@@ -197,7 +202,7 @@ func (h *Handler) levels(c fiber.Ctx) error {
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/templates [get]
 func (h *Handler) templates(c fiber.Ctx) error {
-	items, err := h.rows(c.Context(), `SELECT jsonb_build_object('id',id,'character',character,'romaji',romaji,'script',script,'source_version',source_version) FROM public.kana_stroke_templates ORDER BY script,character,source_version DESC`)
+	items, err := h.rows(c.Context(), `SELECT jsonb_build_object('id',id,'character',character,'romaji',romaji,'script',script,'source_version',source_version,'stroke_count',jsonb_array_length(stroke_data->'strokes')) FROM public.kana_stroke_templates ORDER BY script,character,source_version DESC`)
 	if err != nil {
 		return serverError(c, err)
 	}

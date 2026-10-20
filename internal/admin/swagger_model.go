@@ -147,6 +147,7 @@ type StrokeTemplate struct {
 	Romaji        string    `json:"romaji" example:"a"`
 	Script        string    `json:"script" enums:"hiragana,katakana"`
 	SourceVersion string    `json:"source_version"`
+	StrokeCount   int       `json:"stroke_count"`
 }
 
 type TemplatesResponse struct {

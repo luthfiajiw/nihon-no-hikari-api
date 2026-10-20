@@ -6,6 +6,8 @@ import (
 	"errors"
 	"time"
 
+	"nihon-no-hikari-api/pkg/kanastroke"
+
 	"github.com/google/uuid"
 )
 
@@ -35,15 +37,8 @@ type QuestionOption struct {
 	OrderIndex int16     `json:"order_index"`
 }
 
-type StrokePoint struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-}
-
-type GuideStroke struct {
-	Path   string        `json:"path"`
-	Points []StrokePoint `json:"points"`
-}
+type StrokePoint = kanastroke.Point
+type GuideStroke = kanastroke.Stroke
 
 type WritingGuide struct {
 	Character string        `json:"character"`

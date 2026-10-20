@@ -217,6 +217,92 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/content/{kind}/reorder": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. ordered_ids wajib memuat seluruh anak parent, termasuk draft dan arsip. Module diurutkan dalam course; lesson dalam module. Urutan langsung berlaku tanpa publish. Hanya order_index pada draft dengan parent yang sama yang disinkronkan; perubahan materi lainnya dipertahankan. Seluruh perubahan disimpan dalam satu transaksi.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Simpan urutan module atau lesson",
+                "parameters": [
+                    {
+                        "enum": [
+                            "module",
+                            "lesson"
+                        ],
+                        "type": "string",
+                        "description": "Jenis konten",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Parent dan seluruh ID sesuai urutan baru",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.ReorderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/content/{kind}/{id}": {
             "get": {
                 "security": [
@@ -794,6 +880,294 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Mengonversi SVG KanjiVG dan menyimpan template langsung tanpa draft/publish.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Tambah template kana",
+                "parameters": [
+                    {
+                        "description": "Metadata dan SVG KanjiVG",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.StrokeTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.StrokeTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/templates/preview": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Mengonversi SVG KanjiVG maksimal 256 KiB tanpa menyimpan; menghasilkan 32 titik per goresan.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Pratinjau SVG template kana",
+                "parameters": [
+                    {
+                        "description": "Metadata dan SVG KanjiVG",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.StrokeTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.StrokeTemplatePreviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/templates/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Mengambil metadata dan seluruh stroke_data.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Detail template kana",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID template",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.StrokeTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Kirim semua metadata. SVG opsional kecuali script/karakter berubah; jika tidak dikirim, stroke_data tersimpan dipertahankan. ID tetap, perubahan langsung berlaku untuk attempt baru; attempt lama memakai snapshot.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Edit template kana secara langsung",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID template",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Metadata dan SVG pengganti opsional",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.StrokeTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_admin.StrokeTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
                         }
@@ -2189,6 +2563,21 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_admin.ReorderRequest": {
+            "type": "object",
+            "properties": {
+                "ordered_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "parent_id": {
+                    "type": "string",
+                    "format": "uuid"
+                }
+            }
+        },
         "internal_admin.StatusResponse": {
             "type": "object",
             "properties": {
@@ -2222,6 +2611,114 @@ const docTemplate = `{
                 },
                 "source_version": {
                     "type": "string"
+                },
+                "stroke_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_admin.StrokeTemplateDetail": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string",
+                    "example": "あ"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "romaji": {
+                    "type": "string",
+                    "example": "a"
+                },
+                "script": {
+                    "type": "string",
+                    "enum": [
+                        "hiragana",
+                        "katakana"
+                    ]
+                },
+                "source_version": {
+                    "type": "string"
+                },
+                "stroke_count": {
+                    "type": "integer"
+                },
+                "stroke_data": {
+                    "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Data"
+                }
+            }
+        },
+        "internal_admin.StrokeTemplateInput": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string",
+                    "example": "あ"
+                },
+                "romaji": {
+                    "type": "string",
+                    "example": "a"
+                },
+                "script": {
+                    "type": "string",
+                    "enum": [
+                        "hiragana",
+                        "katakana"
+                    ]
+                },
+                "source_version": {
+                    "type": "string",
+                    "example": "r20260714"
+                },
+                "svg_content": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_admin.StrokeTemplatePreview": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string"
+                },
+                "romaji": {
+                    "type": "string"
+                },
+                "script": {
+                    "type": "string"
+                },
+                "source_version": {
+                    "type": "string"
+                },
+                "stroke_count": {
+                    "type": "integer"
+                },
+                "stroke_data": {
+                    "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Data"
+                }
+            }
+        },
+        "internal_admin.StrokeTemplatePreviewResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_admin.StrokeTemplatePreview"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_admin.StrokeTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_admin.StrokeTemplateDetail"
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2555,7 +3052,7 @@ const docTemplate = `{
                 "points": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_question.StrokePoint"
+                        "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Point"
                     }
                 }
             }
@@ -2819,17 +3316,6 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
-                }
-            }
-        },
-        "internal_question.StrokePoint": {
-            "type": "object",
-            "properties": {
-                "x": {
-                    "type": "number"
-                },
-                "y": {
-                    "type": "number"
                 }
             }
         },
@@ -3383,6 +3869,45 @@ const docTemplate = `{
                 "RoleUser",
                 "RoleAdmin"
             ]
+        },
+        "nihon-no-hikari-api_pkg_kanastroke.Data": {
+            "type": "object",
+            "properties": {
+                "strokes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Stroke"
+                    }
+                },
+                "view_box": {
+                    "type": "number"
+                }
+            }
+        },
+        "nihon-no-hikari-api_pkg_kanastroke.Point": {
+            "type": "object",
+            "properties": {
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                }
+            }
+        },
+        "nihon-no-hikari-api_pkg_kanastroke.Stroke": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Point"
+                    }
+                }
+            }
         },
         "nihon-no-hikari-api_pkg_utils.ErrorRes": {
             "type": "object",

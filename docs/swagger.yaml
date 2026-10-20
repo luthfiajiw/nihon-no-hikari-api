@@ -263,6 +263,16 @@ definitions:
         example: true
         type: boolean
     type: object
+  internal_admin.ReorderRequest:
+    properties:
+      ordered_ids:
+        items:
+          type: string
+        type: array
+      parent_id:
+        format: uuid
+        type: string
+    type: object
   internal_admin.StatusResponse:
     properties:
       success:
@@ -287,6 +297,79 @@ definitions:
         type: string
       source_version:
         type: string
+      stroke_count:
+        type: integer
+    type: object
+  internal_admin.StrokeTemplateDetail:
+    properties:
+      character:
+        example: あ
+        type: string
+      id:
+        format: uuid
+        type: string
+      romaji:
+        example: a
+        type: string
+      script:
+        enum:
+        - hiragana
+        - katakana
+        type: string
+      source_version:
+        type: string
+      stroke_count:
+        type: integer
+      stroke_data:
+        $ref: '#/definitions/nihon-no-hikari-api_pkg_kanastroke.Data'
+    type: object
+  internal_admin.StrokeTemplateInput:
+    properties:
+      character:
+        example: あ
+        type: string
+      romaji:
+        example: a
+        type: string
+      script:
+        enum:
+        - hiragana
+        - katakana
+        type: string
+      source_version:
+        example: r20260714
+        type: string
+      svg_content:
+        type: string
+    type: object
+  internal_admin.StrokeTemplatePreview:
+    properties:
+      character:
+        type: string
+      romaji:
+        type: string
+      script:
+        type: string
+      source_version:
+        type: string
+      stroke_count:
+        type: integer
+      stroke_data:
+        $ref: '#/definitions/nihon-no-hikari-api_pkg_kanastroke.Data'
+    type: object
+  internal_admin.StrokeTemplatePreviewResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_admin.StrokeTemplatePreview'
+      success:
+        type: boolean
+    type: object
+  internal_admin.StrokeTemplateResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_admin.StrokeTemplateDetail'
+      success:
+        type: boolean
     type: object
   internal_admin.TemplatesResponse:
     properties:
@@ -507,7 +590,7 @@ definitions:
         type: string
       points:
         items:
-          $ref: '#/definitions/internal_question.StrokePoint'
+          $ref: '#/definitions/nihon-no-hikari-api_pkg_kanastroke.Point'
         type: array
     type: object
   internal_question.ListQuestionSetsResponse:
@@ -683,13 +766,6 @@ definitions:
         type: string
       success:
         type: boolean
-    type: object
-  internal_question.StrokePoint:
-    properties:
-      x:
-        type: number
-      "y":
-        type: number
     type: object
   internal_question.SubmitAnswerRequest:
     properties:
@@ -1054,6 +1130,31 @@ definitions:
     x-enum-varnames:
     - RoleUser
     - RoleAdmin
+  nihon-no-hikari-api_pkg_kanastroke.Data:
+    properties:
+      strokes:
+        items:
+          $ref: '#/definitions/nihon-no-hikari-api_pkg_kanastroke.Stroke'
+        type: array
+      view_box:
+        type: number
+    type: object
+  nihon-no-hikari-api_pkg_kanastroke.Point:
+    properties:
+      x:
+        type: number
+      "y":
+        type: number
+    type: object
+  nihon-no-hikari-api_pkg_kanastroke.Stroke:
+    properties:
+      path:
+        type: string
+      points:
+        items:
+          $ref: '#/definitions/nihon-no-hikari-api_pkg_kanastroke.Point'
+        type: array
+    type: object
   nihon-no-hikari-api_pkg_utils.ErrorRes:
     properties:
       error:
@@ -1511,6 +1612,66 @@ paths:
       summary: Pulihkan konten yang diarsipkan
       tags:
       - Admin Content
+  /admin/content/{kind}/reorder:
+    post:
+      consumes:
+      - application/json
+      description: Memerlukan role Admin. ordered_ids wajib memuat seluruh anak parent,
+        termasuk draft dan arsip. Module diurutkan dalam course; lesson dalam module.
+        Urutan langsung berlaku tanpa publish. Hanya order_index pada draft dengan
+        parent yang sama yang disinkronkan; perubahan materi lainnya dipertahankan.
+        Seluruh perubahan disimpan dalam satu transaksi.
+      parameters:
+      - description: Jenis konten
+        enum:
+        - module
+        - lesson
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: Parent dan seluruh ID sesuai urutan baru
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_admin.ReorderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.StatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Simpan urutan module atau lesson
+      tags:
+      - Admin Content
   /admin/lesson-content/preview:
     post:
       consumes:
@@ -1626,6 +1787,197 @@ paths:
       security:
       - BearerAuth: []
       summary: Daftar template goresan untuk admin
+      tags:
+      - Admin
+    post:
+      consumes:
+      - application/json
+      description: Memerlukan role Admin. Mengonversi SVG KanjiVG dan menyimpan template
+        langsung tanpa draft/publish.
+      parameters:
+      - description: Metadata dan SVG KanjiVG
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_admin.StrokeTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_admin.StrokeTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Tambah template kana
+      tags:
+      - Admin
+  /admin/templates/{id}:
+    get:
+      description: Memerlukan role Admin. Mengambil metadata dan seluruh stroke_data.
+      parameters:
+      - description: UUID template
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.StrokeTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Detail template kana
+      tags:
+      - Admin
+    patch:
+      consumes:
+      - application/json
+      description: Memerlukan role Admin. Kirim semua metadata. SVG opsional kecuali
+        script/karakter berubah; jika tidak dikirim, stroke_data tersimpan dipertahankan.
+        ID tetap, perubahan langsung berlaku untuk attempt baru; attempt lama memakai
+        snapshot.
+      parameters:
+      - description: UUID template
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Metadata dan SVG pengganti opsional
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_admin.StrokeTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.StrokeTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Edit template kana secara langsung
+      tags:
+      - Admin
+  /admin/templates/preview:
+    post:
+      consumes:
+      - application/json
+      description: Memerlukan role Admin. Mengonversi SVG KanjiVG maksimal 256 KiB
+        tanpa menyimpan; menghasilkan 32 titik per goresan.
+      parameters:
+      - description: Metadata dan SVG KanjiVG
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_admin.StrokeTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_admin.StrokeTemplatePreviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Pratinjau SVG template kana
       tags:
       - Admin
   /admin/users:

@@ -147,3 +147,10 @@ Skor akurasi tidak diterima dari client. Panduan stroke Hiragana baris A berasal
 dari [KanjiVG r20260714](https://github.com/KanjiVG/kanjivg/releases/tag/r20260714),
 © Ulrich Apel dan kontributor, [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
 SVG asli dan konversi titik acuan tersedia di `pkg/db/stroke_sources`.
+
+Template kana dapat ditambah dan diedit langsung melalui admin. Setiap attempt
+menyimpan `writing_guide_snapshot` saat dimulai; panduan dalam respons start dan
+acuan penilaian submit berasal dari data yang sama. Perubahan template setelah
+attempt dimulai tidak mengubah panduan atau penilaiannya. Snapshot writing yang
+hilang/rusak menghasilkan error konfigurasi. Lihat
+[admin kana templates](admin-kana-templates.md) untuk API dan urutan migrasi/rilis.

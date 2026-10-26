@@ -35,3 +35,5 @@ air_errors.log
 # File sistem operasi
 .DS_Store
 Thumbs.db
+
+/graphify-out

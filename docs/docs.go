@@ -1873,6 +1873,88 @@ const docTemplate = `{
                 }
             }
         },
+        "/lessons/{lessonId}/speech-token": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan lesson terpublikasi. Token disimpan di memori klien maksimal sembilan menit; dibatasi 10 permintaan per pengguna per menit.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Lessons"
+                ],
+                "summary": "Token sementara Azure untuk pembacaan lesson",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Lesson ID",
+                        "name": "lessonId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_speech.TokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/question-sets": {
             "get": {
                 "security": [
@@ -3378,6 +3460,34 @@ const docTemplate = `{
                 },
                 "view_box": {
                     "type": "number"
+                }
+            }
+        },
+        "internal_speech.TokenData": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_speech.TokenResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_speech.TokenData"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         },

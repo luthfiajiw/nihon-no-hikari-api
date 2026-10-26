@@ -1,0 +1,13 @@
+# Lesson text-to-speech
+
+Set `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` on the API server using an Azure Speech resource in the public Azure cloud. Compose forwards both variables. Leave them empty to keep the feature disabled without preventing API startup. Never set a public frontend variable containing the key.
+
+`POST /api/v1/lessons/{lessonId}/speech-token` has no request body and requires the existing authenticated session. It checks that the lesson, module, and course are published, and allows ten requests per user per minute per API instance. Success returns `{ success, message, data: { token, region, expires_at } }` and `Cache-Control: no-store`. Expiry is a conservative nine minutes from the start of the Azure exchange. The browser caches the token only in memory.
+
+Errors: 400 invalid UUID, 401 unauthenticated, 404 unavailable lesson, 429 rate limit (`Retry-After: 60`), 500 lesson lookup failure, 502 Azure failure, 503 missing/invalid configuration, 504 Azure timeout. Upstream bodies and subscription keys are not returned or logged.
+
+The API needs outbound HTTPS to `https://{region}.api.cognitive.microsoft.com/sts/v1.0/issueToken`. The browser's official Speech SDK connects to the regional Azure Speech service over WSS. A temporary Azure token is resource-scoped, not restricted to a lesson; the lesson check gates token issuance. Apply Azure resource quotas/budgets appropriate to the deployment.
+
+The frontend adds automatic reading controls to visible, nonempty `<p>` and `<h1>` through `<h6>` elements. Each control floats to the left of its paragraph or heading; sections, bare divs and bare table text do not get their own controls. Inline markup inside a paragraph or heading remains readable. The frontend synthesizes only the selected paragraph or heading, prefetches the next language segment, and caches audio in memory for the current lesson (20 MiB LRU). It does not store generated audio or change lesson HTML. Default voices are `id-ID-GadisNeural` and `ja-JP-NanamiNeural`. Text in Japanese script uses Japanese; Latin/romanized narration uses Indonesian. Word ranges follow Azure metadata and actual Web Audio playback time.
+
+Run automated tests without Azure credentials. For live verification, configure a Speech resource and open a lesson on desktop and mobile: check paragraph/heading controls and their left-side placement, Indonesian/Japanese pronunciation, timing, stop/retry, scrolling, lesson navigation, and mutual exclusion with prerecorded vocabulary audio. Synthesis is billed by Azure according to resource usage; no live synthesis runs in automated tests.

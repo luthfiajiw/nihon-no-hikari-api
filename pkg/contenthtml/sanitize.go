@@ -19,7 +19,7 @@ var (
 
 func newPolicy() *bluemonday.Policy {
 	p := bluemonday.NewPolicy()
-	p.AllowElements("section", "p", "br", "strong", "em", "u", "s", "h1", "h2", "h3", "blockquote", "ul", "ol", "li", "hr", "span", "div", "table", "thead", "tbody", "tr", "th", "td", "figure", "figcaption", "a", "img", "button")
+	p.AllowElements("section", "p", "br", "strong", "em", "u", "s", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "ul", "ol", "li", "hr", "span", "div", "table", "thead", "tbody", "tr", "th", "td", "figure", "figcaption", "a", "img", "button")
 	p.AllowAttrs("href").OnElements("a")
 	p.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
 	p.AllowAttrs("colspan", "rowspan").OnElements("td", "th")
@@ -28,7 +28,7 @@ func newPolicy() *bluemonday.Policy {
 	p.AllowAttrs("type").Matching(regexp.MustCompile(`^button$`)).OnElements("button")
 	p.AllowAttrs("aria-label").OnElements("button")
 	p.AllowAttrs("class").Matching(regexp.MustCompile(`^[a-zA-Z0-9 _-]{1,120}$`)).OnElements("div", "span", "button")
-	p.AllowAttrs("style").OnElements("section", "p", "span", "div", "h1", "h2", "h3", "th", "td", "table", "img", "button")
+	p.AllowAttrs("style").OnElements("section", "p", "span", "div", "h1", "h2", "h3", "h4", "h5", "h6", "th", "td", "table", "img", "button")
 	p.AllowStyles("color", "background-color").Matching(hexColor).Globally()
 	p.AllowStyles("background").Matching(hexColor).Globally()
 	p.AllowStyles("font-size").Matching(fontSize).Globally()
@@ -41,7 +41,7 @@ func newPolicy() *bluemonday.Policy {
 	// URL resources, fixed overlays, arbitrary transforms or z-index.
 	cardElements := []string{"section", "div", "button"}
 	p.AllowStyles("margin", "margin-top", "margin-bottom", "padding", "gap", "border-radius").Matching(spacing).OnElements(cardElements...)
-	p.AllowStyles("margin").Matching(regexp.MustCompile(`^0$`)).OnElements("h1", "h2", "h3", "p")
+	p.AllowStyles("margin").Matching(regexp.MustCompile(`^0$`)).OnElements("h1", "h2", "h3", "h4", "h5", "h6", "p")
 	p.AllowStyles("border").Matching(regexp.MustCompile(`^(?:none|0|[0-9]{1,2}px\s+solid\s+#[0-9a-f]{3}(?:[0-9a-f]{3})?)$`)).OnElements(cardElements...)
 	p.AllowStyles("box-shadow").Matching(regexp.MustCompile(`^0\s+[0-9]{1,2}px\s+[0-9]{1,2}px\s+rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*(?:0|0\.[0-9]{1,2}|1)\s*\)$`)).OnElements("section", "div")
 	p.AllowStyles("display").MatchingEnum("grid", "block", "flex").OnElements("section", "div")

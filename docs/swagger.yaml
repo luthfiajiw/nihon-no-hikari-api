@@ -807,6 +807,24 @@ definitions:
       view_box:
         type: number
     type: object
+  internal_speech.TokenData:
+    properties:
+      expires_at:
+        type: string
+      region:
+        type: string
+      token:
+        type: string
+    type: object
+  internal_speech.TokenResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_speech.TokenData'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
   internal_user.ChangeRoleRequest:
     properties:
       role:
@@ -2428,6 +2446,60 @@ paths:
       security:
       - BearerAuth: []
       summary: Perbarui progres lesson
+      tags:
+      - Lessons
+  /lessons/{lessonId}/speech-token:
+    post:
+      description: Memerlukan lesson terpublikasi. Token disimpan di memori klien
+        maksimal sembilan menit; dibatasi 10 permintaan per pengguna per menit.
+      parameters:
+      - description: Lesson ID
+        in: path
+        name: lessonId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_speech.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Token sementara Azure untuk pembacaan lesson
       tags:
       - Lessons
   /question-sets:

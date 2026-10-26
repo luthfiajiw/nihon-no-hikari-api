@@ -2,10 +2,33 @@ package contenthtml
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestAllHeadingLevelsKeepSafeMarkupAndStyles(t *testing.T) {
+	for level := 1; level <= 6; level++ {
+		t.Run(fmt.Sprintf("h%d", level), func(t *testing.T) {
+			input := fmt.Sprintf(`<h%d style="font-size:20px;color:#123456;margin:0;background-image:url(https://evil.example/x)" onclick="alert(1)">Judul <strong>あい</strong><br>lanjutan</h%d>`, level, level)
+			clean := HTML(input)
+			for _, safe := range []string{fmt.Sprintf("<h%d ", level), fmt.Sprintf("</h%d>", level), "font-size: 20px", "color: #123456", "margin: 0", "<strong>あい</strong>", "<br>"} {
+				if !strings.Contains(clean, safe) {
+					t.Errorf("heading lost %q: %s", safe, clean)
+				}
+			}
+			for _, unsafe := range []string{"onclick", "alert(", "evil.example", "background-image"} {
+				if strings.Contains(clean, unsafe) {
+					t.Errorf("unsafe heading fragment %q survived: %s", unsafe, clean)
+				}
+			}
+			if HTML(clean) != clean {
+				t.Errorf("heading sanitization is not idempotent: %s", clean)
+			}
+		})
+	}
+}
 
 func TestJSONVocabularyLesson(t *testing.T) {
 	html, err := os.ReadFile("testdata/lesson-vocabulary.html")

@@ -14,6 +14,8 @@ type Config struct {
 	JWTRefreshSecretKey  string        `envconfig:"JWT_REFRESH_SECRET_KEY" required:"true"`
 	AccessTokenDuration  time.Duration `envconfig:"ACCESS_TOKEN_DURATION" default:"15m"`
 	RefreshTokenDuration time.Duration `envconfig:"REFRESH_TOKEN_DURATION" default:"24h"`
+	AzureSpeechKey       string        `envconfig:"AZURE_SPEECH_KEY"`
+	AzureSpeechRegion    string        `envconfig:"AZURE_SPEECH_REGION"`
 }
 
 func LoadConfig() (*Config, error) {

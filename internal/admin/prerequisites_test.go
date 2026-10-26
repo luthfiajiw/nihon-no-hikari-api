@@ -36,7 +36,7 @@ func TestPrerequisitesSurviveDraftRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			actual := published.prerequisites(kind)
+			actual := published.Prerequisites(kind)
 			if !published.IsEntry || len(actual) != len(requiredIDs) || (actual == nil) != (requiredIDs == nil) {
 				t.Fatalf("%s draft changed entry/prerequisites: %#v", kind, published)
 			}

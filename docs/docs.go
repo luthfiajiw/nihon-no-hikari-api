@@ -2297,30 +2297,26 @@ const docTemplate = `{
                 "courses": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "additionalProperties": true
+                        "type": "object"
                     }
                 },
                 "lessons": {
                     "description": "Lesson hanya memuat id, module_id, title, slug, order_index, is_published, dan archived_at.",
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "additionalProperties": true
+                        "type": "object"
                     }
                 },
                 "modules": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "additionalProperties": true
+                        "type": "object"
                     }
                 },
                 "question_sets": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "additionalProperties": true
+                        "type": "object"
                     }
                 }
             }
@@ -2342,16 +2338,11 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "description": "Kolom resource sesuai kind; question_set menyertakan questions, options, dan is_correct.",
-                    "type": "object",
-                    "additionalProperties": true
+                    "type": "object"
                 },
                 "draft": {
                     "description": "Payload perubahan yang belum diterbitkan, atau null jika tidak ada draft.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_admin.ContentRequest"
-                        }
-                    ]
+                    "type": "object"
                 },
                 "success": {
                     "type": "boolean",
@@ -2366,8 +2357,7 @@ const docTemplate = `{
                     "description": "Kolom resource sesuai kind, tanpa content lesson; course menyertakan module_count dan lesson_count.",
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "additionalProperties": true
+                        "type": "object"
                     }
                 },
                 "success": {
@@ -2547,7 +2537,8 @@ const docTemplate = `{
                     "example": "N5"
                 },
                 "created_at": {
-                    "type": "string"
+                    "type": "string",
+                    "format": "date-time"
                 },
                 "description": {
                     "type": "string"
@@ -2563,7 +2554,8 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "updated_at": {
-                    "type": "string"
+                    "type": "string",
+                    "format": "date-time"
                 }
             }
         },
@@ -2602,7 +2594,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "content": {
-                    "$ref": "#/definitions/internal_admin.LessonContent"
+                    "type": "object"
                 }
             }
         },
@@ -2610,7 +2602,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "data": {
-                    "$ref": "#/definitions/internal_admin.LessonContent"
+                    "type": "object"
                 },
                 "success": {
                     "type": "boolean",

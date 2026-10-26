@@ -4,24 +4,20 @@ definitions:
     properties:
       courses:
         items:
-          additionalProperties: true
           type: object
         type: array
       lessons:
         description: Lesson hanya memuat id, module_id, title, slug, order_index,
           is_published, dan archived_at.
         items:
-          additionalProperties: true
           type: object
         type: array
       modules:
         items:
-          additionalProperties: true
           type: object
         type: array
       question_sets:
         items:
-          additionalProperties: true
           type: object
         type: array
     type: object
@@ -36,15 +32,13 @@ definitions:
   internal_admin.ContentDetailResponse:
     properties:
       data:
-        additionalProperties: true
         description: Kolom resource sesuai kind; question_set menyertakan questions,
           options, dan is_correct.
         type: object
       draft:
-        allOf:
-        - $ref: '#/definitions/internal_admin.ContentRequest'
         description: Payload perubahan yang belum diterbitkan, atau null jika tidak
           ada draft.
+        type: object
       success:
         example: true
         type: boolean
@@ -55,7 +49,6 @@ definitions:
         description: Kolom resource sesuai kind, tanpa content lesson; course menyertakan
           module_count dan lesson_count.
         items:
-          additionalProperties: true
           type: object
         type: array
       success:
@@ -196,6 +189,7 @@ definitions:
         example: N5
         type: string
       created_at:
+        format: date-time
         type: string
       description:
         type: string
@@ -207,6 +201,7 @@ definitions:
       order_index:
         type: integer
       updated_at:
+        format: date-time
         type: string
     type: object
   internal_admin.LevelsResponse:
@@ -233,12 +228,12 @@ definitions:
   internal_admin.PreviewRequest:
     properties:
       content:
-        $ref: '#/definitions/internal_admin.LessonContent'
+        type: object
     type: object
   internal_admin.PreviewResponse:
     properties:
       data:
-        $ref: '#/definitions/internal_admin.LessonContent'
+        type: object
       success:
         example: true
         type: boolean

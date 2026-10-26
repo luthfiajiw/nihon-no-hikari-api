@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"nihon-no-hikari-api/pkg/db"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,7 +22,7 @@ func TestParseReorder(t *testing.T) {
 	parent, id := uuid.New(), uuid.New()
 	valid, _ := json.Marshal(ReorderRequest{ParentID: parent, OrderedIDs: []uuid.UUID{id}})
 	for _, kind := range []string{"module", "lesson"} {
-		if _, err := parseReorder(kind, valid); err != nil {
+		if _, err := validatedReorderInput(kind, valid); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -30,16 +32,16 @@ func TestParseReorder(t *testing.T) {
 		fmt.Sprintf(`{"parent_id":%q,"ordered_ids":[%q,%q]}`, parent, id, strings.ToUpper(id.String())),
 		fmt.Sprintf(`{"parent_id":%q,"ordered_ids":[%q]}`, parent, uuid.Nil),
 	} {
-		if _, err := parseReorder("module", []byte(raw)); err == nil {
+		if _, err := validatedReorderInput("module", []byte(raw)); err == nil {
 			t.Fatalf("accepted invalid payload %s", raw)
 		}
 	}
-	if _, err := parseReorder("course", valid); err == nil {
+	if _, err := validatedReorderInput("course", valid); err == nil {
 		t.Fatal("accepted course reordering")
 	}
 	tooMany := ReorderRequest{ParentID: parent, OrderedIDs: make([]uuid.UUID, 32769)}
 	raw, _ := json.Marshal(tooMany)
-	if _, err := parseReorder("lesson", raw); err == nil {
+	if _, err := validatedReorderInput("lesson", raw); err == nil {
 		t.Fatal("accepted smallint overflow")
 	}
 }
@@ -92,7 +94,7 @@ func TestReorderDatabase(t *testing.T) {
 		content jsonb, order_index smallint NOT NULL, is_entry boolean NOT NULL DEFAULT false, is_published boolean NOT NULL DEFAULT false,
 		archived_at timestamptz, updated_at timestamptz DEFAULT now());
 		CREATE TABLE admin_drafts(resource_type text NOT NULL, resource_id uuid NOT NULL, payload jsonb NOT NULL, updated_at timestamptz DEFAULT now(), PRIMARY KEY(resource_type,resource_id));`)
-	h := &Handler{pool: pool}
+	h := &Handler{service: NewService(db.NewTx(pool), NewRepository(pool))}
 	app := fiber.New()
 	app.Post("/content/:kind/reorder", h.reorder)
 	app.Post("/content/:kind/:id/publish", h.publish)
@@ -181,4 +183,12 @@ func TestReorderDatabase(t *testing.T) {
 			}
 		})
 	}
+}
+
+func validatedReorderInput(kind string, raw []byte) (ReorderRequest, error) {
+	var input ReorderRequest
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return input, err
+	}
+	return input, input.Validate(kind)
 }

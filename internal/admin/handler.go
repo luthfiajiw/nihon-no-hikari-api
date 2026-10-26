@@ -1,35 +1,27 @@
 package admin
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"net/url"
-	"regexp"
-	"strings"
+	"io"
 
-	"nihon-no-hikari-api/pkg/contenthtml"
+	"nihon-no-hikari-api/internal/admin/model"
 	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Handler struct {
-	pool       *pgxpool.Pool
+	service    Service
 	middleware middleware.Middleware
 }
 
-func NewHandler(pool *pgxpool.Pool, m middleware.Middleware) *Handler {
-	return &Handler{pool: pool, middleware: m}
+func NewHandler(service Service, m middleware.Middleware) *Handler {
+	return &Handler{service: service, middleware: m}
 }
-
-var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
 	g := app.Group("/api/v1/admin", h.middleware.AuthMiddleware(), h.middleware.RequireRole("Admin"))
@@ -52,59 +44,53 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	g.Post("/content/:kind/:id/restore", h.restore)
 }
 
-func table(kind string) (string, bool) {
-	switch kind {
-	case "course":
-		return "courses", true
-	case "module":
-		return "modules", true
-	case "lesson":
-		return "lessons", true
-	case "question_set":
-		return "question_sets", true
-	default:
-		return "", false
-	}
-}
-
 func bad(c fiber.Ctx, message string) error {
-	return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: message})
+	return c.Status(400).JSON(utils.ErrorRes{Success: false, Error: message})
 }
 
 func serverError(c fiber.Ctx, err error) error {
-	if errors.Is(err, errInvalidPrerequisites) {
-		return bad(c, err.Error())
-	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		return c.Status(404).JSON(utils.ErrorRes{Success: false, Error: "konten tidak ditemukan"})
-	}
-	if strings.Contains(err.Error(), "SQLSTATE 23505") {
-		return c.Status(409).JSON(utils.ErrorRes{Success: false, Error: "slug atau urutan sudah dipakai"})
-	}
-	if strings.Contains(err.Error(), "SQLSTATE 23503") || strings.Contains(err.Error(), "SQLSTATE 23514") {
+	switch {
+	case errors.Is(err, ErrInvalidInput), errors.Is(err, errInvalidPrerequisites):
+		return bad(c, decodeError(err).Error())
+	case errors.Is(err, ErrPayloadTooLarge):
+		return c.Status(413).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	case errors.Is(err, ErrStaleOrder):
+		return c.Status(409).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	case errors.Is(err, ErrNotFound):
+		message := "konten tidak ditemukan"
+		var app *applicationError
+		if errors.As(err, &app) {
+			message = app.message
+		}
+		return c.Status(404).JSON(utils.ErrorRes{Success: false, Error: message})
+	case errors.Is(err, ErrConflict):
+		message := "slug atau urutan sudah dipakai"
+		var app *applicationError
+		if errors.As(err, &app) {
+			message = app.message
+		}
+		return c.Status(409).JSON(utils.ErrorRes{Success: false, Error: message})
+	case errors.Is(err, ErrInvalidRelation):
 		return bad(c, "relasi atau konfigurasi konten tidak valid")
+	default:
+		return c.Status(500).JSON(utils.ErrorRes{Success: false, Error: "gagal menyimpan konten"})
 	}
-	return c.Status(500).JSON(utils.ErrorRes{Success: false, Error: "gagal menyimpan konten"})
+}
+
+func templateServerError(c fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, ErrInvalidInput), errors.Is(err, ErrPayloadTooLarge):
+		return serverError(c, err)
+	case errors.Is(err, ErrNotFound):
+		return c.Status(404).JSON(utils.ErrorRes{Success: false, Error: "template kana tidak ditemukan"})
+	case errors.Is(err, ErrConflict):
+		return c.Status(409).JSON(utils.ErrorRes{Success: false, Error: "template dengan script, karakter, dan versi sumber tersebut sudah ada"})
+	default:
+		return c.Status(500).JSON(utils.ErrorRes{Success: false, Error: "gagal menyimpan atau mengambil template kana"})
+	}
 }
 
 func resourceID(c fiber.Ctx) (uuid.UUID, error) { return uuid.Parse(c.Params("id")) }
-
-func (h *Handler) rows(ctx context.Context, query string, args ...any) ([]json.RawMessage, error) {
-	rows, err := h.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := make([]json.RawMessage, 0)
-	for rows.Next() {
-		var item json.RawMessage
-		if err := rows.Scan(&item); err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
-}
 
 // me godoc
 // @Summary Periksa akses admin
@@ -112,12 +98,12 @@ func (h *Handler) rows(ctx context.Context, query string, args ...any) ([]json.R
 // @Tags Admin
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {object} MeResponse
+// @Success 200 {object} model.MeResponse
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
 // @Router /admin/me [get]
 func (h *Handler) me(c fiber.Ctx) error {
-	return c.JSON(fiber.Map{"success": true, "role": "Admin"})
+	return c.JSON(MeResponse{Success: true, Role: "Admin"})
 }
 
 // catalog godoc
@@ -127,14 +113,13 @@ func (h *Handler) me(c fiber.Ctx) error {
 // @Produce json
 // @Security BearerAuth
 // @Param course_id query string false "Filter UUID kursus" Format(uuid)
-// @Success 200 {object} CatalogResponse
+// @Success 200 {object} model.CatalogResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/catalog [get]
 func (h *Handler) catalog(c fiber.Ctx) error {
-	data := map[string][]json.RawMessage{}
 	var courseID *uuid.UUID
 	if raw := c.Query("course_id"); raw != "" {
 		id, err := uuid.Parse(raw)
@@ -143,32 +128,11 @@ func (h *Handler) catalog(c fiber.Ctx) error {
 		}
 		courseID = &id
 	}
-	for kind, name := range map[string]string{"courses": "courses", "modules": "modules", "lessons": "lessons", "question_sets": "question_sets"} {
-		data[kind] = []json.RawMessage{}
-		if courseID != nil && name != "modules" && name != "lessons" {
-			continue
-		}
-		projection := "to_jsonb(t)"
-		if name == "lessons" {
-			projection = "jsonb_build_object('id',t.id,'module_id',t.module_id,'title',t.title,'slug',t.slug,'order_index',t.order_index,'is_published',t.is_published,'archived_at',t.archived_at)"
-		}
-		where := ""
-		args := []any{}
-		if courseID != nil {
-			args = append(args, *courseID)
-			if name == "modules" {
-				where = " WHERE t.course_id=$1"
-			} else {
-				where = " WHERE t.module_id IN (SELECT id FROM modules WHERE course_id=$1)"
-			}
-		}
-		items, err := h.rows(c.Context(), fmt.Sprintf(`SELECT %s FROM public.%s t%s ORDER BY t.order_index, t.created_at, t.id`, projection, name, where), args...)
-		if err != nil {
-			return serverError(c, err)
-		}
-		data[kind] = items
+	response, err := h.service.Catalog(c.Context(), courseID)
+	if err != nil {
+		return serverError(c, err)
 	}
-	return c.JSON(fiber.Map{"success": true, "data": data})
+	return c.JSON(response)
 }
 
 // levels godoc
@@ -177,17 +141,17 @@ func (h *Handler) catalog(c fiber.Ctx) error {
 // @Tags Admin
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {object} LevelsResponse
+// @Success 200 {object} model.LevelsResponse
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/levels [get]
 func (h *Handler) levels(c fiber.Ctx) error {
-	items, err := h.rows(c.Context(), `SELECT to_jsonb(t) FROM public.levels t ORDER BY order_index`)
+	response, err := h.service.Levels(c.Context())
 	if err != nil {
 		return serverError(c, err)
 	}
-	return c.JSON(fiber.Map{"success": true, "data": items})
+	return c.JSON(response)
 }
 
 // templates godoc
@@ -196,17 +160,17 @@ func (h *Handler) levels(c fiber.Ctx) error {
 // @Tags Admin
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {object} TemplatesResponse
+// @Success 200 {object} model.TemplatesResponse
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/templates [get]
 func (h *Handler) templates(c fiber.Ctx) error {
-	items, err := h.rows(c.Context(), `SELECT jsonb_build_object('id',id,'character',character,'romaji',romaji,'script',script,'source_version',source_version,'stroke_count',jsonb_array_length(stroke_data->'strokes')) FROM public.kana_stroke_templates ORDER BY script,character,source_version DESC`)
+	response, err := h.service.Templates(c.Context())
 	if err != nil {
 		return serverError(c, err)
 	}
-	return c.JSON(fiber.Map{"success": true, "data": items})
+	return c.JSON(response)
 }
 
 // preview godoc
@@ -216,24 +180,22 @@ func (h *Handler) templates(c fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param request body PreviewRequest true "Konten lesson untuk pratinjau"
-// @Success 200 {object} PreviewResponse
+// @Param request body model.PreviewRequest true "Konten lesson untuk pratinjau"
+// @Success 200 {object} model.PreviewResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
 // @Router /admin/lesson-content/preview [post]
 func (h *Handler) preview(c fiber.Ctx) error {
-	var body struct {
-		Content json.RawMessage `json:"content"`
-	}
+	var body model.PreviewRequest
 	if err := c.Bind().Body(&body); err != nil {
 		return bad(c, "konten tidak valid")
 	}
-	clean, err := contenthtml.JSON(body.Content)
+	response, err := h.service.PreviewContent(c.Context(), body.Content)
 	if err != nil {
-		return bad(c, "konten lesson harus berupa objek dengan content dan tips")
+		return serverError(c, err)
 	}
-	return c.JSON(fiber.Map{"success": true, "data": json.RawMessage(clean)})
+	return c.JSON(response)
 }
 
 // list godoc
@@ -243,26 +205,22 @@ func (h *Handler) preview(c fiber.Ctx) error {
 // @Produce json
 // @Security BearerAuth
 // @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
-// @Success 200 {object} ContentListResponse
+// @Success 200 {object} model.ContentListResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/content/{kind} [get]
 func (h *Handler) list(c fiber.Ctx) error {
-	name, ok := table(c.Params("kind"))
-	if !ok {
+	kind := c.Params("kind")
+	if !validKind(kind) {
 		return bad(c, "jenis konten tidak valid")
 	}
-	projection := "to_jsonb(t) - 'content'"
-	if name == "courses" {
-		projection = `to_jsonb(t) || jsonb_build_object('module_count',(SELECT count(*) FROM modules m WHERE m.course_id=t.id),'lesson_count',(SELECT count(*) FROM lessons l JOIN modules m ON m.id=l.module_id WHERE m.course_id=t.id))`
-	}
-	items, err := h.rows(c.Context(), fmt.Sprintf(`SELECT %s FROM public.%s t ORDER BY t.order_index,t.created_at,t.id`, projection, name))
+	response, err := h.service.ListContent(c.Context(), kind)
 	if err != nil {
 		return serverError(c, err)
 	}
-	return c.JSON(fiber.Map{"success": true, "data": items})
+	return c.JSON(response)
 }
 
 // detail godoc
@@ -273,7 +231,7 @@ func (h *Handler) list(c fiber.Ctx) error {
 // @Security BearerAuth
 // @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
 // @Param id path string true "UUID resource" Format(uuid)
-// @Success 200 {object} ContentDetailResponse
+// @Success 200 {object} model.ContentDetailResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
@@ -281,175 +239,19 @@ func (h *Handler) list(c fiber.Ctx) error {
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/content/{kind}/{id} [get]
 func (h *Handler) detail(c fiber.Ctx) error {
-	name, ok := table(c.Params("kind"))
-	if !ok {
+	kind := c.Params("kind")
+	if !validKind(kind) {
 		return bad(c, "jenis konten tidak valid")
 	}
 	id, err := resourceID(c)
 	if err != nil {
 		return bad(c, "ID tidak valid")
 	}
-	var live json.RawMessage
-	projection := "to_jsonb(t)"
-	if kind := c.Params("kind"); kind == "module" || kind == "lesson" {
-		projection += fmt.Sprintf(` || jsonb_build_object('%s_prerequisites', COALESCE((SELECT jsonb_agg(p.required_%s_id ORDER BY p.required_%s_id) FROM %s_prerequisites p WHERE p.%s_id=t.id), '[]'::jsonb))`, kind, kind, kind, kind, kind)
-	}
-	err = h.pool.QueryRow(c.Context(), fmt.Sprintf(`SELECT %s FROM public.%s t WHERE id=$1`, projection, name), id).Scan(&live)
+	response, err := h.service.Detail(c.Context(), kind, id)
 	if err != nil {
 		return serverError(c, err)
 	}
-	if name == "lessons" {
-		var fields map[string]json.RawMessage
-		if json.Unmarshal(live, &fields) == nil {
-			clean, err := contenthtml.JSON(fields["content"])
-			if err == nil {
-				fields["content"] = clean
-				live, _ = json.Marshal(fields)
-			}
-		}
-	}
-	if name == "question_sets" {
-		live, err = h.withQuestions(c.Context(), live, id)
-		if err != nil {
-			return serverError(c, err)
-		}
-	}
-	var draft json.RawMessage
-	err = h.pool.QueryRow(c.Context(), `SELECT payload FROM public.admin_drafts WHERE resource_type=$1 AND resource_id=$2`, c.Params("kind"), id).Scan(&draft)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return serverError(c, err)
-	}
-	return c.JSON(fiber.Map{"success": true, "data": live, "draft": draft})
-}
-
-type coreInput struct {
-	LevelID             uuid.UUID       `json:"level_id"`
-	CourseID            uuid.UUID       `json:"course_id"`
-	ModuleID            uuid.UUID       `json:"module_id"`
-	Slug                string          `json:"slug"`
-	Title               string          `json:"title"`
-	Description         *string         `json:"description"`
-	ThumbnailURL        *string         `json:"thumbnail_url"`
-	OrderIndex          int16           `json:"order_index"`
-	IsMandatory         bool            `json:"is_mandatory"`
-	IsEntry             bool            `json:"is_entry"`
-	EstimatedMinutes    *int32          `json:"estimated_minutes"`
-	Content             json.RawMessage `json:"content"`
-	ModulePrerequisites []uuid.UUID     `json:"module_prerequisites"`
-	LessonPrerequisites []uuid.UUID     `json:"lesson_prerequisites"`
-}
-
-func parseCore(kind string, raw []byte) (coreInput, error) {
-	var v coreInput
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return v, err
-	}
-	if !slugPattern.MatchString(v.Slug) || len(v.Slug) > 120 || strings.TrimSpace(v.Title) == "" || len(v.Title) > 160 || v.OrderIndex < 0 {
-		return v, errors.New("slug, judul, atau urutan tidak valid")
-	}
-	switch kind {
-	case "course":
-		if v.LevelID == uuid.Nil {
-			return v, errors.New("level wajib dipilih")
-		}
-	case "module":
-		if v.CourseID == uuid.Nil {
-			return v, errors.New("kursus wajib dipilih")
-		}
-	case "lesson":
-		if v.ModuleID == uuid.Nil {
-			return v, errors.New("module wajib dipilih")
-		}
-		clean, err := contenthtml.JSON(v.Content)
-		if err != nil {
-			return v, err
-		}
-		v.Content = clean
-	}
-	if v.ThumbnailURL != nil && *v.ThumbnailURL != "" {
-		u, err := url.Parse(*v.ThumbnailURL)
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return v, errors.New("URL gambar tidak valid")
-		}
-	}
-	if v.EstimatedMinutes != nil && *v.EstimatedMinutes < 0 {
-		return v, errors.New("estimasi waktu tidak valid")
-	}
-	for _, requiredID := range v.prerequisites(kind) {
-		if requiredID == uuid.Nil {
-			return v, errors.New("ID prasyarat tidak valid")
-		}
-	}
-	return v, nil
-}
-
-func saveCore(ctx context.Context, tx pgx.Tx, kind string, id uuid.UUID, v coreInput, create bool) error {
-	if err := validatePrerequisites(ctx, tx, kind, id, v.prerequisites(kind)); err != nil {
-		return err
-	}
-	switch kind {
-	case "course":
-		if create {
-			_, err := tx.Exec(ctx, `INSERT INTO courses(id,level_id,slug,title,description,thumbnail_url,order_index) VALUES($1,$2,$3,$4,$5,$6,$7)`, id, v.LevelID, v.Slug, v.Title, v.Description, v.ThumbnailURL, v.OrderIndex)
-			return err
-		}
-		_, err := tx.Exec(ctx, `UPDATE courses SET level_id=$2,slug=$3,title=$4,description=$5,thumbnail_url=$6,order_index=$7,updated_at=now() WHERE id=$1`, id, v.LevelID, v.Slug, v.Title, v.Description, v.ThumbnailURL, v.OrderIndex)
-		return err
-	case "module":
-		if create {
-			if _, err := tx.Exec(ctx, `UPDATE modules SET order_index=order_index+1 WHERE course_id=$1 AND order_index >= $2`, v.CourseID, v.OrderIndex); err != nil {
-				return err
-			}
-			_, err := tx.Exec(ctx, `INSERT INTO modules(id,course_id,slug,title,description,order_index,is_mandatory,is_entry,estimated_minutes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, v.CourseID, v.Slug, v.Title, v.Description, v.OrderIndex, v.IsMandatory, v.IsEntry, v.EstimatedMinutes)
-			if err != nil {
-				return err
-			}
-			return savePrerequisites(ctx, tx, kind, id, v.ModulePrerequisites)
-		}
-		var oldCourse uuid.UUID
-		var oldOrder int16
-		if err := tx.QueryRow(ctx, `SELECT course_id,order_index FROM modules WHERE id=$1`, id).Scan(&oldCourse, &oldOrder); err != nil {
-			return err
-		}
-		if oldCourse == v.CourseID {
-			if v.OrderIndex < oldOrder {
-				if _, err := tx.Exec(ctx, `UPDATE modules SET order_index=order_index+1 WHERE course_id=$1 AND id<>$2 AND order_index >= $3 AND order_index < $4`, oldCourse, id, v.OrderIndex, oldOrder); err != nil {
-					return err
-				}
-			}
-			if v.OrderIndex > oldOrder {
-				if _, err := tx.Exec(ctx, `UPDATE modules SET order_index=order_index-1 WHERE course_id=$1 AND id<>$2 AND order_index > $3 AND order_index <= $4`, oldCourse, id, oldOrder, v.OrderIndex); err != nil {
-					return err
-				}
-			}
-		} else {
-			if _, err := tx.Exec(ctx, `UPDATE modules SET order_index=order_index-1 WHERE course_id=$1 AND order_index > $2`, oldCourse, oldOrder); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(ctx, `UPDATE modules SET order_index=order_index+1 WHERE course_id=$1 AND order_index >= $2`, v.CourseID, v.OrderIndex); err != nil {
-				return err
-			}
-		}
-		_, err := tx.Exec(ctx, `UPDATE modules SET course_id=$2,slug=$3,title=$4,description=$5,order_index=$6,is_mandatory=$7,is_entry=$8,estimated_minutes=$9,updated_at=now() WHERE id=$1`, id, v.CourseID, v.Slug, v.Title, v.Description, v.OrderIndex, v.IsMandatory, v.IsEntry, v.EstimatedMinutes)
-		if err != nil {
-			return err
-		}
-		return savePrerequisites(ctx, tx, kind, id, v.ModulePrerequisites)
-	case "lesson":
-		if create {
-			_, err := tx.Exec(ctx, `INSERT INTO lessons(id,module_id,slug,title,content,order_index,is_entry) VALUES($1,$2,$3,$4,$5::jsonb,$6,$7)`, id, v.ModuleID, v.Slug, v.Title, string(v.Content), v.OrderIndex, v.IsEntry)
-			if err != nil {
-				return err
-			}
-			return savePrerequisites(ctx, tx, kind, id, v.LessonPrerequisites)
-		}
-		_, err := tx.Exec(ctx, `UPDATE lessons SET module_id=$2,slug=$3,title=$4,content=$5::jsonb,order_index=$6,is_entry=$7,updated_at=now() WHERE id=$1`, id, v.ModuleID, v.Slug, v.Title, string(v.Content), v.OrderIndex, v.IsEntry)
-		if err != nil {
-			return err
-		}
-		return savePrerequisites(ctx, tx, kind, id, v.LessonPrerequisites)
-	}
-	return errors.New("jenis konten tidak valid")
+	return c.JSON(response)
 }
 
 // create godoc
@@ -460,8 +262,8 @@ func saveCore(ctx context.Context, tx pgx.Tx, kind string, id uuid.UUID, v coreI
 // @Produce json
 // @Security BearerAuth
 // @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
-// @Param request body ContentRequest true "Payload lengkap sesuai jenis resource"
-// @Success 201 {object} CreateResponse
+// @Param request body model.ContentRequest true "Payload lengkap sesuai jenis resource"
+// @Success 201 {object} model.CreateResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
@@ -470,29 +272,28 @@ func saveCore(ctx context.Context, tx pgx.Tx, kind string, id uuid.UUID, v coreI
 // @Router /admin/content/{kind} [post]
 func (h *Handler) create(c fiber.Ctx) error {
 	kind := c.Params("kind")
-	if _, ok := table(kind); !ok {
+	if !validKind(kind) {
 		return bad(c, "jenis konten tidak valid")
 	}
+	var response CreateResponse
+	var err error
 	if kind == "question_set" {
-		return h.createQuestionSet(c)
+		var input setInput
+		if err := json.Unmarshal(c.Body(), &input); err != nil {
+			return bad(c, decodeError(err).Error())
+		}
+		response, err = h.service.CreateQuestionSet(c.Context(), input)
+	} else {
+		var input coreInput
+		if err := json.Unmarshal(c.Body(), &input); err != nil {
+			return bad(c, decodeError(err).Error())
+		}
+		response, err = h.service.CreateContent(c.Context(), kind, input)
 	}
-	v, err := parseCore(kind, c.Body())
 	if err != nil {
-		return bad(c, err.Error())
-	}
-	id := uuid.New()
-	tx, err := h.pool.Begin(c.Context())
-	if err != nil {
 		return serverError(c, err)
 	}
-	defer tx.Rollback(c.Context())
-	if err := saveCore(c.Context(), tx, kind, id, v, true); err != nil {
-		return serverError(c, err)
-	}
-	if err := tx.Commit(c.Context()); err != nil {
-		return serverError(c, err)
-	}
-	return c.Status(201).JSON(fiber.Map{"success": true, "id": id})
+	return c.Status(201).JSON(response)
 }
 
 // update godoc
@@ -504,8 +305,8 @@ func (h *Handler) create(c fiber.Ctx) error {
 // @Security BearerAuth
 // @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
 // @Param id path string true "UUID resource" Format(uuid)
-// @Param request body ContentRequest true "Payload lengkap sesuai jenis resource"
-// @Success 200 {object} UpdateResponse
+// @Param request body model.ContentRequest true "Payload lengkap sesuai jenis resource"
+// @Success 200 {object} model.UpdateResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
@@ -515,46 +316,31 @@ func (h *Handler) create(c fiber.Ctx) error {
 // @Router /admin/content/{kind}/{id} [patch]
 func (h *Handler) update(c fiber.Ctx) error {
 	kind := c.Params("kind")
-	if _, ok := table(kind); !ok {
+	if !validKind(kind) {
 		return bad(c, "jenis konten tidak valid")
-	}
-	if kind == "question_set" {
-		return h.updateQuestionSet(c)
 	}
 	id, err := resourceID(c)
 	if err != nil {
 		return bad(c, "ID tidak valid")
 	}
-	v, err := parseCore(kind, c.Body())
-	if err != nil {
-		return bad(c, err.Error())
-	}
-	name, _ := table(kind)
-	tx, err := h.pool.Begin(c.Context())
-	if err != nil {
-		return serverError(c, err)
-	}
-	defer tx.Rollback(c.Context())
-	var published bool
-	if err := tx.QueryRow(c.Context(), fmt.Sprintf(`SELECT is_published FROM public.%s WHERE id=$1 FOR UPDATE`, name), id).Scan(&published); err != nil {
-		return serverError(c, err)
-	}
-	if published {
-		if err := validatePrerequisites(c.Context(), tx, kind, id, v.prerequisites(kind)); err != nil {
-			return serverError(c, err)
+	var response UpdateResponse
+	if kind == "question_set" {
+		var input setInput
+		if err := json.Unmarshal(c.Body(), &input); err != nil {
+			return bad(c, decodeError(err).Error())
 		}
-		payload, _ := json.Marshal(v)
-		_, err = tx.Exec(c.Context(), `INSERT INTO admin_drafts(resource_type,resource_id,payload) VALUES($1,$2,$3::jsonb) ON CONFLICT(resource_type,resource_id) DO UPDATE SET payload=EXCLUDED.payload,updated_at=now()`, kind, id, string(payload))
+		response, err = h.service.UpdateQuestionSet(c.Context(), id, input)
 	} else {
-		err = saveCore(c.Context(), tx, kind, id, v, false)
+		var input coreInput
+		if err := json.Unmarshal(c.Body(), &input); err != nil {
+			return bad(c, decodeError(err).Error())
+		}
+		response, err = h.service.UpdateContent(c.Context(), kind, id, input)
 	}
 	if err != nil {
 		return serverError(c, err)
 	}
-	if err := tx.Commit(c.Context()); err != nil {
-		return serverError(c, err)
-	}
-	return c.JSON(fiber.Map{"success": true, "draft": published})
+	return c.JSON(response)
 }
 
 // publish godoc
@@ -565,7 +351,7 @@ func (h *Handler) update(c fiber.Ctx) error {
 // @Security BearerAuth
 // @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
 // @Param id path string true "UUID resource" Format(uuid)
-// @Success 200 {object} PublishResponse
+// @Success 200 {object} model.PublishResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
@@ -575,53 +361,18 @@ func (h *Handler) update(c fiber.Ctx) error {
 // @Router /admin/content/{kind}/{id}/publish [post]
 func (h *Handler) publish(c fiber.Ctx) error {
 	kind := c.Params("kind")
-	if _, ok := table(kind); !ok {
+	if !validKind(kind) {
 		return bad(c, "jenis konten tidak valid")
-	}
-	if kind == "question_set" {
-		return h.publishQuestionSet(c)
 	}
 	id, err := resourceID(c)
 	if err != nil {
 		return bad(c, "ID tidak valid")
 	}
-	name, _ := table(kind)
-	tx, err := h.pool.Begin(c.Context())
+	response, err := h.service.PublishContent(c.Context(), kind, id)
 	if err != nil {
 		return serverError(c, err)
 	}
-	defer tx.Rollback(c.Context())
-	var archived bool
-	if err := tx.QueryRow(c.Context(), fmt.Sprintf(`SELECT archived_at IS NOT NULL FROM public.%s WHERE id=$1 FOR UPDATE`, name), id).Scan(&archived); err != nil {
-		return serverError(c, err)
-	}
-	if archived {
-		return bad(c, "pulihkan konten sebelum diterbitkan")
-	}
-	var raw []byte
-	err = tx.QueryRow(c.Context(), `SELECT payload FROM admin_drafts WHERE resource_type=$1 AND resource_id=$2`, kind, id).Scan(&raw)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return serverError(c, err)
-	}
-	if err == nil {
-		v, err := parseCore(kind, raw)
-		if err != nil {
-			return bad(c, err.Error())
-		}
-		if err := saveCore(c.Context(), tx, kind, id, v, false); err != nil {
-			return serverError(c, err)
-		}
-	}
-	if _, err := tx.Exec(c.Context(), fmt.Sprintf(`UPDATE public.%s SET is_published=true,updated_at=now() WHERE id=$1`, name), id); err != nil {
-		return serverError(c, err)
-	}
-	if _, err := tx.Exec(c.Context(), `DELETE FROM admin_drafts WHERE resource_type=$1 AND resource_id=$2`, kind, id); err != nil {
-		return serverError(c, err)
-	}
-	if err := tx.Commit(c.Context()); err != nil {
-		return serverError(c, err)
-	}
-	return c.JSON(fiber.Map{"success": true})
+	return c.JSON(response)
 }
 
 // remove godoc
@@ -632,7 +383,7 @@ func (h *Handler) publish(c fiber.Ctx) error {
 // @Security BearerAuth
 // @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
 // @Param id path string true "UUID resource" Format(uuid)
-// @Success 200 {object} RemoveResponse
+// @Success 200 {object} model.RemoveResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
@@ -641,59 +392,18 @@ func (h *Handler) publish(c fiber.Ctx) error {
 // @Router /admin/content/{kind}/{id} [delete]
 func (h *Handler) remove(c fiber.Ctx) error {
 	kind := c.Params("kind")
-	name, ok := table(kind)
-	if !ok {
+	if !validKind(kind) {
 		return bad(c, "jenis konten tidak valid")
 	}
 	id, err := resourceID(c)
 	if err != nil {
 		return bad(c, "ID tidak valid")
 	}
-	tx, err := h.pool.Begin(c.Context())
+	response, err := h.service.RemoveContent(c.Context(), kind, id)
 	if err != nil {
 		return serverError(c, err)
 	}
-	defer tx.Rollback(c.Context())
-	var exists bool
-	if err := tx.QueryRow(c.Context(), fmt.Sprintf(`SELECT true FROM public.%s WHERE id=$1 FOR UPDATE`, name), id).Scan(&exists); err != nil {
-		return serverError(c, err)
-	}
-	historySQL := map[string]string{
-		"course":       `SELECT EXISTS(SELECT 1 FROM enrollments WHERE course_id=$1) OR EXISTS(SELECT 1 FROM user_module_progress p JOIN modules m ON m.id=p.module_id WHERE m.course_id=$1) OR EXISTS(SELECT 1 FROM user_lesson_progress p JOIN lessons l ON l.id=p.lesson_id JOIN modules m ON m.id=l.module_id WHERE m.course_id=$1) OR EXISTS(SELECT 1 FROM attempts a JOIN question_sets s ON s.id=a.question_set_id LEFT JOIN lessons l ON l.id=s.lesson_id JOIN modules m ON m.id=COALESCE(s.module_id,l.module_id) WHERE m.course_id=$1)`,
-		"module":       `SELECT EXISTS(SELECT 1 FROM user_module_progress WHERE module_id=$1) OR EXISTS(SELECT 1 FROM user_lesson_progress p JOIN lessons l ON l.id=p.lesson_id WHERE l.module_id=$1) OR EXISTS(SELECT 1 FROM attempts a JOIN question_sets s ON s.id=a.question_set_id LEFT JOIN lessons l ON l.id=s.lesson_id WHERE COALESCE(s.module_id,l.module_id)=$1)`,
-		"lesson":       `SELECT EXISTS(SELECT 1 FROM user_lesson_progress WHERE lesson_id=$1) OR EXISTS(SELECT 1 FROM attempts a JOIN question_sets s ON s.id=a.question_set_id WHERE s.lesson_id=$1)`,
-		"question_set": `SELECT EXISTS(SELECT 1 FROM attempts a JOIN question_sets attempted_set ON attempted_set.id=a.question_set_id JOIN question_sets target_set ON target_set.lineage_id=attempted_set.lineage_id WHERE target_set.id=$1)`,
-	}
-	var used bool
-	if err := tx.QueryRow(c.Context(), historySQL[kind], id).Scan(&used); err != nil {
-		return serverError(c, err)
-	}
-	if used {
-		_, err = tx.Exec(c.Context(), fmt.Sprintf(`UPDATE public.%s SET is_published=false,archived_at=now() WHERE id=$1`, name), id)
-	} else {
-		if _, err = tx.Exec(c.Context(), `SAVEPOINT admin_delete`); err != nil {
-			return serverError(c, err)
-		}
-		_, err = tx.Exec(c.Context(), fmt.Sprintf(`DELETE FROM public.%s WHERE id=$1`, name), id)
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			if _, rollbackErr := tx.Exec(c.Context(), `ROLLBACK TO SAVEPOINT admin_delete`); rollbackErr != nil {
-				return serverError(c, rollbackErr)
-			}
-			used = true
-			_, err = tx.Exec(c.Context(), fmt.Sprintf(`UPDATE public.%s SET is_published=false,archived_at=now() WHERE id=$1`, name), id)
-		}
-	}
-	if err != nil {
-		return serverError(c, err)
-	}
-	if _, err := tx.Exec(c.Context(), `DELETE FROM admin_drafts WHERE resource_type=$1 AND resource_id=$2`, kind, id); err != nil {
-		return serverError(c, err)
-	}
-	if err := tx.Commit(c.Context()); err != nil {
-		return serverError(c, err)
-	}
-	return c.JSON(fiber.Map{"success": true, "archived": used})
+	return c.JSON(response)
 }
 
 // restore godoc
@@ -704,7 +414,7 @@ func (h *Handler) remove(c fiber.Ctx) error {
 // @Security BearerAuth
 // @Param kind path string true "Jenis resource" Enums(course,module,lesson,question_set)
 // @Param id path string true "UUID resource" Format(uuid)
-// @Success 200 {object} StatusResponse
+// @Success 200 {object} model.StatusResponse
 // @Failure 400 {object} utils.ErrorRes
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
@@ -712,20 +422,178 @@ func (h *Handler) remove(c fiber.Ctx) error {
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/content/{kind}/{id}/restore [post]
 func (h *Handler) restore(c fiber.Ctx) error {
-	name, ok := table(c.Params("kind"))
-	if !ok {
+	kind := c.Params("kind")
+	if !validKind(kind) {
 		return bad(c, "jenis konten tidak valid")
 	}
 	id, err := resourceID(c)
 	if err != nil {
 		return bad(c, "ID tidak valid")
 	}
-	result, err := h.pool.Exec(c.Context(), fmt.Sprintf(`UPDATE public.%s SET archived_at=NULL,is_published=false WHERE id=$1 AND archived_at IS NOT NULL`, name), id)
+	response, err := h.service.RestoreContent(c.Context(), kind, id)
 	if err != nil {
 		return serverError(c, err)
 	}
-	if result.RowsAffected() == 0 {
-		return c.Status(404).JSON(utils.ErrorRes{Success: false, Error: "arsip tidak ditemukan"})
+	return c.JSON(response)
+}
+
+// reorder godoc
+// @Summary Simpan urutan module atau lesson
+// @Description Memerlukan role Admin. ordered_ids wajib memuat seluruh anak parent, termasuk draft dan arsip. Module diurutkan dalam course; lesson dalam module. Urutan langsung berlaku tanpa publish. Hanya order_index pada draft dengan parent yang sama yang disinkronkan; perubahan materi lainnya dipertahankan. Seluruh perubahan disimpan dalam satu transaksi.
+// @Tags Admin Content
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param kind path string true "Jenis konten" Enums(module,lesson)
+// @Param request body model.ReorderRequest true "Parent dan seluruh ID sesuai urutan baru"
+// @Success 200 {object} model.StatusResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/content/{kind}/reorder [post]
+func (h *Handler) reorder(c fiber.Ctx) error {
+	kind := c.Params("kind")
+	if kind != "module" && kind != "lesson" {
+		return bad(c, "jenis konten tidak valid")
 	}
-	return c.JSON(fiber.Map{"success": true})
+	var input ReorderRequest
+	if err := json.Unmarshal(c.Body(), &input); err != nil {
+		return bad(c, "data urutan tidak valid")
+	}
+	response, err := h.service.Reorder(c.Context(), kind, input)
+	if err != nil {
+		return serverError(c, err)
+	}
+	return c.JSON(response)
+}
+
+// templateDetail godoc
+// @Summary Detail template kana
+// @Description Memerlukan role Admin. Mengambil metadata dan seluruh stroke_data.
+// @Tags Admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "UUID template" Format(uuid)
+// @Success 200 {object} model.StrokeTemplateResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/templates/{id} [get]
+func (h *Handler) templateDetail(c fiber.Ctx) error {
+	id, err := resourceID(c)
+	if err != nil {
+		return bad(c, "ID template tidak valid")
+	}
+	response, err := h.service.Template(c.Context(), id)
+	if err != nil {
+		return templateServerError(c, err)
+	}
+	return c.JSON(response)
+}
+
+// previewTemplate godoc
+// @Summary Pratinjau SVG template kana
+// @Description Memerlukan role Admin. Mengonversi SVG KanjiVG maksimal 256 KiB tanpa menyimpan; menghasilkan 32 titik per goresan.
+// @Tags Admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.StrokeTemplateInput true "Metadata dan SVG KanjiVG"
+// @Success 200 {object} model.StrokeTemplatePreviewResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 413 {object} utils.ErrorRes
+// @Router /admin/templates/preview [post]
+func (h *Handler) previewTemplate(c fiber.Ctx) error {
+	input, err := decodeTemplateInput(c.Body())
+	if err != nil {
+		return bad(c, decodeError(err).Error())
+	}
+	response, err := h.service.PreviewTemplate(c.Context(), input)
+	if err != nil {
+		return templateServerError(c, err)
+	}
+	return c.JSON(response)
+}
+
+// createTemplate godoc
+// @Summary Tambah template kana
+// @Description Memerlukan role Admin. Mengonversi SVG KanjiVG dan menyimpan template langsung tanpa draft/publish.
+// @Tags Admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.StrokeTemplateInput true "Metadata dan SVG KanjiVG"
+// @Success 201 {object} model.StrokeTemplateResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 413 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/templates [post]
+func (h *Handler) createTemplate(c fiber.Ctx) error {
+	input, err := decodeTemplateInput(c.Body())
+	if err != nil {
+		return bad(c, decodeError(err).Error())
+	}
+	response, err := h.service.CreateTemplate(c.Context(), input)
+	if err != nil {
+		return templateServerError(c, err)
+	}
+	return c.Status(201).JSON(response)
+}
+
+// updateTemplate godoc
+// @Summary Edit template kana secara langsung
+// @Description Memerlukan role Admin. Kirim semua metadata. SVG opsional kecuali script/karakter berubah; jika tidak dikirim, stroke_data tersimpan dipertahankan. ID tetap, perubahan langsung berlaku untuk attempt baru; attempt lama memakai snapshot.
+// @Tags Admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "UUID template" Format(uuid)
+// @Param request body model.StrokeTemplateInput true "Metadata dan SVG pengganti opsional"
+// @Success 200 {object} model.StrokeTemplateResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 413 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/templates/{id} [patch]
+func (h *Handler) updateTemplate(c fiber.Ctx) error {
+	id, err := resourceID(c)
+	if err != nil {
+		return bad(c, "ID template tidak valid")
+	}
+	input, err := decodeTemplateInput(c.Body())
+	if err != nil {
+		return bad(c, decodeError(err).Error())
+	}
+	response, err := h.service.UpdateTemplate(c.Context(), id, input)
+	if err != nil {
+		return templateServerError(c, err)
+	}
+	return c.JSON(response)
+}
+
+// decodeTemplateInput keeps the template endpoint's strict JSON decoding policy.
+func decodeTemplateInput(raw []byte) (StrokeTemplateInput, error) {
+	var input *StrokeTemplateInput
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil || input == nil {
+		return StrokeTemplateInput{}, errors.New("payload template tidak valid")
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return StrokeTemplateInput{}, errors.New("payload template tidak valid")
+	}
+	return *input, nil
 }

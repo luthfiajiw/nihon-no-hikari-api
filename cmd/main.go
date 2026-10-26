@@ -56,11 +56,13 @@ func main() {
 	authRepo := auth.NewRepository(pool)
 	courseRepo := course.NewRepository(pool)
 	questionRepo := question.NewRepository(pool)
+	adminRepo := admin.NewRepository(pool)
 
 	// SERVICES
 	authService := auth.NewService(tx, cfg, authRepo, userRepo)
 	courseService := course.NewService(courseRepo, questionRepo)
 	questionService := question.NewService(questionRepo)
+	adminService := admin.NewService(tx, adminRepo)
 
 	// MIDDLEWARE
 	authMiddleware := middleware.New(cfg, pool)
@@ -70,7 +72,7 @@ func main() {
 	courseHandler := course.NewHandler(courseService, authMiddleware)
 	questionHandler := question.NewHandler(questionService, authMiddleware)
 	userHandler := user.NewHandler(pool, authMiddleware)
-	adminHandler := admin.NewHandler(pool, authMiddleware)
+	adminHandler := admin.NewHandler(adminService, authMiddleware)
 	speechHandler := speech.NewHandler(cfg, courseRepo, authMiddleware)
 
 	// FIBER APP

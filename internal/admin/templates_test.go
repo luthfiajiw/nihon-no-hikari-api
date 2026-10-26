@@ -13,6 +13,7 @@ import (
 
 	"nihon-no-hikari-api/config"
 	"nihon-no-hikari-api/internal/testdb"
+	"nihon-no-hikari-api/pkg/db"
 	"nihon-no-hikari-api/pkg/kanastroke"
 	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/utils"
@@ -29,11 +30,11 @@ func TestParseTemplateInput(t *testing.T) {
 		`{"script":"hiragana","character":"あ","romaji":"a","source_version":" "}`,
 		`{"script":"hiragana","character":"あ","romaji":"a","source_version":"test","stroke_data":{}}`,
 		`{"script":"hiragana","character":"あ","romaji":"a","source_version":"test"}{}`} {
-		if _, err := parseTemplateInput([]byte(raw)); err == nil {
+		if _, err := validatedTemplateInput([]byte(raw)); err == nil {
 			t.Errorf("accepted %s", raw)
 		}
 	}
-	input, err := parseTemplateInput([]byte(`{"script":" hiragana ","character":"か\u3099","romaji":" ga ","source_version":" test "}`))
+	input, err := validatedTemplateInput([]byte(`{"script":" hiragana ","character":"か\u3099","romaji":" ga ","source_version":" test "}`))
 	if err != nil || input.Character != "が" || input.Romaji != "ga" {
 		t.Fatalf("normalization: %+v %v", input, err)
 	}
@@ -54,7 +55,7 @@ func TestTemplatesDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := fiber.New()
-	NewHandler(pool, middleware.New(&config.Config{JWTSecretKey: secret}, pool)).RegisterRoutes(app)
+	NewHandler(NewService(db.NewTx(pool), NewRepository(pool)), middleware.New(&config.Config{JWTSecretKey: secret}, pool)).RegisterRoutes(app)
 	call := func(method, path string, body any, auth bool, status int) []byte {
 		t.Helper()
 		raw, _ := json.Marshal(body)
@@ -158,4 +159,13 @@ func TestTemplatesDatabase(t *testing.T) {
 	if _, err := pool.Exec(ctx, `DELETE FROM kana_stroke_templates WHERE id=$1`, created.Data.ID); err == nil {
 		t.Fatal("delete guard was removed")
 	}
+}
+
+func validatedTemplateInput(raw []byte) (StrokeTemplateInput, error) {
+	input, err := decodeTemplateInput(raw)
+	if err != nil {
+		return input, err
+	}
+	err = input.Validate()
+	return input, err
 }

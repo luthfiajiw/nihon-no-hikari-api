@@ -507,6 +507,213 @@ definitions:
     - grant_type
     - token
     type: object
+  internal_kotoba.ErrorResponse:
+    properties:
+      error:
+        type: string
+      field_errors:
+        $ref: '#/definitions/internal_kotoba.FieldErrors'
+      success:
+        type: boolean
+    type: object
+  internal_kotoba.Example:
+    properties:
+      indonesian:
+        type: string
+      japanese:
+        type: string
+    type: object
+  internal_kotoba.FieldErrors:
+    additionalProperties:
+      type: string
+    type: object
+  internal_kotoba.Furigana:
+    properties:
+      reading:
+        type: string
+      text:
+        type: string
+    type: object
+  internal_kotoba.Media:
+    properties:
+      id:
+        type: string
+      kind:
+        type: string
+      mime_type:
+        type: string
+      size_bytes:
+        type: integer
+      url:
+        type: string
+      url_expires_at:
+        type: string
+    type: object
+  internal_kotoba.MediaResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_kotoba.Media'
+      success:
+        type: boolean
+    type: object
+  internal_kotoba.StatusResponse:
+    properties:
+      success:
+        type: boolean
+    type: object
+  internal_kotoba.Topic:
+    properties:
+      category:
+        type: string
+      cover_media_id:
+        type: string
+      cover_url:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      exercise_count:
+        type: integer
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_visible:
+        type: boolean
+      level:
+        type: string
+      media_urls_expires_at:
+        type: string
+      order_index:
+        type: integer
+      title:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+      vocabulary:
+        items:
+          $ref: '#/definitions/internal_kotoba.Vocabulary'
+        type: array
+      vocabulary_count:
+        type: integer
+    type: object
+  internal_kotoba.TopicInput:
+    properties:
+      category:
+        enum:
+        - Dasar
+        - Populer
+        - Pemula
+        type: string
+      cover_media_id:
+        type: string
+      description:
+        maxLength: 200
+        type: string
+      is_active:
+        type: boolean
+      is_visible:
+        type: boolean
+      level:
+        enum:
+        - N5
+        - N4
+        - N3
+        - N2
+        - N1
+        type: string
+      order_index:
+        minimum: 1
+        type: integer
+      title:
+        maxLength: 160
+        type: string
+      version:
+        type: integer
+      vocabulary:
+        items:
+          $ref: '#/definitions/internal_kotoba.VocabularyInput'
+        type: array
+    type: object
+  internal_kotoba.TopicResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_kotoba.Topic'
+      success:
+        type: boolean
+    type: object
+  internal_kotoba.TopicsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_kotoba.Topic'
+        type: array
+      success:
+        type: boolean
+    type: object
+  internal_kotoba.Vocabulary:
+    properties:
+      audio_media_id:
+        type: string
+      audio_url:
+        type: string
+      example:
+        $ref: '#/definitions/internal_kotoba.Example'
+      furigana:
+        items:
+          $ref: '#/definitions/internal_kotoba.Furigana'
+        type: array
+      hiragana:
+        type: string
+      id:
+        type: string
+      kanji:
+        type: string
+      order_index:
+        type: integer
+      romaji:
+        type: string
+      translation:
+        type: string
+      type:
+        enum:
+        - Kata Benda
+        - Kata Kerja
+        - Kata Sifat
+        - Lainnya
+        type: string
+    type: object
+  internal_kotoba.VocabularyInput:
+    properties:
+      audio_media_id:
+        type: string
+      example:
+        $ref: '#/definitions/internal_kotoba.Example'
+      furigana:
+        items:
+          $ref: '#/definitions/internal_kotoba.Furigana'
+        type: array
+      hiragana:
+        type: string
+      id:
+        type: string
+      kanji:
+        type: string
+      romaji:
+        type: string
+      translation:
+        type: string
+      type:
+        enum:
+        - Kata Benda
+        - Kata Kerja
+        - Kata Sifat
+        - Lainnya
+        type: string
+    type: object
   internal_question.AbandonAttemptResponse:
     properties:
       message:
@@ -1685,6 +1892,310 @@ paths:
       summary: Simpan urutan module atau lesson
       tags:
       - Admin Content
+  /admin/kotoba/media:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Satu file per permintaan. PNG/JPG maksimal 2 MiB; MP3 maksimal
+        1 MiB. Preview memakai signed URL selama 15 menit. File yang tidak dipasang
+        ke topik dibersihkan setelah 24 jam.
+      parameters:
+      - description: Jenis media
+        enum:
+        - cover
+        - audio
+        in: formData
+        name: kind
+        required: true
+        type: string
+      - description: Cover PNG/JPG atau audio MP3
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_kotoba.MediaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload cover atau audio ke Supabase private
+      tags:
+      - Kotoba Admin
+  /admin/kotoba/topics:
+    get:
+      description: Seluruh status; tanpa pagination. Memerlukan role Admin.
+      parameters:
+      - description: Level JLPT
+        enum:
+        - N5
+        - N4
+        - N3
+        - N2
+        - N1
+        in: query
+        name: level
+        type: string
+      - description: Cari judul dan deskripsi
+        in: query
+        name: search
+        type: string
+      - description: Status aktif
+        enum:
+        - all
+        - active
+        - inactive
+        in: query
+        name: status
+        type: string
+      - default: order
+        description: Urutan
+        enum:
+        - order
+        - title
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_kotoba.TopicsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Daftar topik Kotoba admin
+      tags:
+      - Kotoba Admin
+    post:
+      consumes:
+      - application/json
+      description: Upload media terlebih dahulu. Kosakata baru tidak mengirim id.
+        Audio opsional.
+      parameters:
+      - description: Form topik lengkap
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_kotoba.TopicInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_kotoba.TopicResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat topik beserta kosakata
+      tags:
+      - Kotoba Admin
+  /admin/kotoba/topics/{id}:
+    delete:
+      description: Media yang tidak lagi digunakan dibersihkan setelah 24 jam.
+      parameters:
+      - description: UUID topik
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_kotoba.StatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus topik dan kosakatanya
+      tags:
+      - Kotoba Admin
+    get:
+      parameters:
+      - description: UUID topik
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_kotoba.TopicResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Detail topik untuk editor Kotoba
+      tags:
+      - Kotoba Admin
+    put:
+      consumes:
+      - application/json
+      description: version wajib sesuai respons terakhir. Kosakata dengan id dipertahankan;
+        tanpa id dibuat baru; yang tidak dikirim dihapus. audio_media_id null menghapus
+        audio.
+      parameters:
+      - description: UUID topik
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Form lengkap beserta version
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_kotoba.TopicInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_kotoba.TopicResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ganti seluruh isi topik dan urutan kosakata
+      tags:
+      - Kotoba Admin
   /admin/lesson-content/preview:
     post:
       consumes:
@@ -2319,6 +2830,99 @@ paths:
       summary: Perbarui progres modul
       tags:
       - Courses
+  /kotoba/topics:
+    get:
+      description: Hanya topik aktif dan terlihat; tanpa pagination. Respons siswa
+        tidak menyertakan versi, status, atau ID media.
+      parameters:
+      - description: Level JLPT
+        enum:
+        - N5
+        - N4
+        - N3
+        - N2
+        - N1
+        in: query
+        name: level
+        type: string
+      - description: Cari judul dan deskripsi
+        in: query
+        name: search
+        type: string
+      - default: newest
+        description: Urutan
+        enum:
+        - newest
+        - title
+        - vocabulary
+        - order
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_kotoba.TopicsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Daftar topik Kotoba siswa
+      tags:
+      - Kotoba
+  /kotoba/topics/{id}:
+    get:
+      description: Topik nonaktif menghasilkan 404. Topik aktif yang disembunyikan
+        tetap dapat diakses lewat ID. ID media dan versi hanya tersedia di endpoint
+        admin.
+      parameters:
+      - description: UUID topik
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_kotoba.TopicResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_kotoba.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Detail topik dan kosakata siswa
+      tags:
+      - Kotoba
   /lessons:
     get:
       description: Mengambil lesson yang dikelompokkan berdasarkan modul beserta status

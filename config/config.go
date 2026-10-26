@@ -16,6 +16,10 @@ type Config struct {
 	RefreshTokenDuration time.Duration `envconfig:"REFRESH_TOKEN_DURATION" default:"24h"`
 	AzureSpeechKey       string        `envconfig:"AZURE_SPEECH_KEY"`
 	AzureSpeechRegion    string        `envconfig:"AZURE_SPEECH_REGION"`
+	SupabaseURL          string        `envconfig:"SUPABASE_URL"`
+	SupabaseServiceKey   string        `envconfig:"SUPABASE_SERVICE_ROLE_KEY"`
+	KotobaCoverBucket    string        `envconfig:"SUPABASE_KOTOBA_COVER_BUCKET" default:"kotoba-covers"`
+	KotobaAudioBucket    string        `envconfig:"SUPABASE_KOTOBA_AUDIO_BUCKET" default:"kotoba-audio"`
 }
 
 func LoadConfig() (*Config, error) {

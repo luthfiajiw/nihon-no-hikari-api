@@ -1,17 +1,20 @@
 package main
 
 import (
+	"context"
 	"log"
 	"nihon-no-hikari-api/config"
 	_ "nihon-no-hikari-api/docs"
 	"nihon-no-hikari-api/internal/admin"
 	"nihon-no-hikari-api/internal/auth"
 	"nihon-no-hikari-api/internal/course"
+	"nihon-no-hikari-api/internal/kotoba"
 	"nihon-no-hikari-api/internal/question"
 	"nihon-no-hikari-api/internal/speech"
 	"nihon-no-hikari-api/internal/user"
 	"nihon-no-hikari-api/pkg/db"
 	"nihon-no-hikari-api/pkg/middleware"
+	"nihon-no-hikari-api/pkg/supabasestorage"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/go-playground/validator/v10"
@@ -57,12 +60,18 @@ func main() {
 	courseRepo := course.NewRepository(pool)
 	questionRepo := question.NewRepository(pool)
 	adminRepo := admin.NewRepository(pool)
+	kotobaRepo := kotoba.NewRepository(pool)
 
 	// SERVICES
 	authService := auth.NewService(tx, cfg, authRepo, userRepo)
 	courseService := course.NewService(courseRepo, questionRepo)
 	questionService := question.NewService(questionRepo)
 	adminService := admin.NewService(tx, adminRepo)
+	storage := supabasestorage.New(cfg.SupabaseURL, cfg.SupabaseServiceKey, nil)
+	kotobaService := kotoba.NewService(tx, kotobaRepo, storage, cfg.KotobaCoverBucket, cfg.KotobaAudioBucket)
+	cleanupCtx, stopCleanup := context.WithCancel(context.Background())
+	defer stopCleanup()
+	go kotobaService.RunCleanup(cleanupCtx)
 
 	// MIDDLEWARE
 	authMiddleware := middleware.New(cfg, pool)
@@ -74,6 +83,7 @@ func main() {
 	userHandler := user.NewHandler(pool, authMiddleware)
 	adminHandler := admin.NewHandler(adminService, authMiddleware)
 	speechHandler := speech.NewHandler(cfg, courseRepo, authMiddleware)
+	kotobaHandler := kotoba.NewHandler(kotobaService, authMiddleware)
 
 	// FIBER APP
 	app := fiber.New()
@@ -86,6 +96,7 @@ func main() {
 	userHandler.RegisterRoutes(app)
 	adminHandler.RegisterRoutes(app)
 	speechHandler.RegisterRoutes(app)
+	kotobaHandler.RegisterRoutes(app)
 
 	if err := app.Listen(cfg.Port); err != nil {
 		log.Fatalf("server failed to start: %v", err)

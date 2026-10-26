@@ -710,6 +710,463 @@
                 }
             }
         },
+        "/admin/kotoba/media": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Satu file per permintaan. PNG/JPG maksimal 2 MiB; MP3 maksimal 1 MiB. Preview memakai signed URL selama 15 menit. File yang tidak dipasang ke topik dibersihkan setelah 24 jam.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Kotoba Admin"
+                ],
+                "summary": "Upload cover atau audio ke Supabase private",
+                "parameters": [
+                    {
+                        "enum": [
+                            "cover",
+                            "audio"
+                        ],
+                        "type": "string",
+                        "description": "Jenis media",
+                        "name": "kind",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Cover PNG/JPG atau audio MP3",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.MediaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/kotoba/topics": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Seluruh status; tanpa pagination. Memerlukan role Admin.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Kotoba Admin"
+                ],
+                "summary": "Daftar topik Kotoba admin",
+                "parameters": [
+                    {
+                        "enum": [
+                            "N5",
+                            "N4",
+                            "N3",
+                            "N2",
+                            "N1"
+                        ],
+                        "type": "string",
+                        "description": "Level JLPT",
+                        "name": "level",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cari judul dan deskripsi",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "all",
+                            "active",
+                            "inactive"
+                        ],
+                        "type": "string",
+                        "description": "Status aktif",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "order",
+                            "title"
+                        ],
+                        "type": "string",
+                        "default": "order",
+                        "description": "Urutan",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.TopicsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload media terlebih dahulu. Kosakata baru tidak mengirim id. Audio opsional.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Kotoba Admin"
+                ],
+                "summary": "Buat topik beserta kosakata",
+                "parameters": [
+                    {
+                        "description": "Form topik lengkap",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.TopicInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.TopicResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/kotoba/topics/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Kotoba Admin"
+                ],
+                "summary": "Detail topik untuk editor Kotoba",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID topik",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.TopicResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "version wajib sesuai respons terakhir. Kosakata dengan id dipertahankan; tanpa id dibuat baru; yang tidak dikirim dihapus. audio_media_id null menghapus audio.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Kotoba Admin"
+                ],
+                "summary": "Ganti seluruh isi topik dan urutan kosakata",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID topik",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Form lengkap beserta version",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.TopicInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.TopicResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Media yang tidak lagi digunakan dibersihkan setelah 24 jam.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Kotoba Admin"
+                ],
+                "summary": "Hapus topik dan kosakatanya",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID topik",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/lesson-content/preview": {
             "post": {
                 "security": [
@@ -1673,6 +2130,142 @@
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/kotoba/topics": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Hanya topik aktif dan terlihat; tanpa pagination. Respons siswa tidak menyertakan versi, status, atau ID media.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Kotoba"
+                ],
+                "summary": "Daftar topik Kotoba siswa",
+                "parameters": [
+                    {
+                        "enum": [
+                            "N5",
+                            "N4",
+                            "N3",
+                            "N2",
+                            "N1"
+                        ],
+                        "type": "string",
+                        "description": "Level JLPT",
+                        "name": "level",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cari judul dan deskripsi",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "newest",
+                            "title",
+                            "vocabulary",
+                            "order"
+                        ],
+                        "type": "string",
+                        "default": "newest",
+                        "description": "Urutan",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.TopicsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/kotoba/topics/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Topik nonaktif menghasilkan 404. Topik aktif yang disembunyikan tetap dapat diakses lewat ID. ID media dan versi hanya tersedia di endpoint admin.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Kotoba"
+                ],
+                "summary": "Detail topik dan kosakata siswa",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID topik",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.TopicResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_kotoba.ErrorResponse"
                         }
                     }
                 }
@@ -3001,6 +3594,315 @@
                 },
                 "token": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_kotoba.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "field_errors": {
+                    "$ref": "#/definitions/internal_kotoba.FieldErrors"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_kotoba.Example": {
+            "type": "object",
+            "properties": {
+                "indonesian": {
+                    "type": "string"
+                },
+                "japanese": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_kotoba.FieldErrors": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            }
+        },
+        "internal_kotoba.Furigana": {
+            "type": "object",
+            "properties": {
+                "reading": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_kotoba.Media": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "size_bytes": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "url_expires_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_kotoba.MediaResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_kotoba.Media"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_kotoba.StatusResponse": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_kotoba.Topic": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "cover_media_id": {
+                    "type": "string"
+                },
+                "cover_url": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "exercise_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "is_visible": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "media_urls_expires_at": {
+                    "type": "string"
+                },
+                "order_index": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                },
+                "vocabulary": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_kotoba.Vocabulary"
+                    }
+                },
+                "vocabulary_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_kotoba.TopicInput": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "Dasar",
+                        "Populer",
+                        "Pemula"
+                    ]
+                },
+                "cover_media_id": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "is_visible": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string",
+                    "enum": [
+                        "N5",
+                        "N4",
+                        "N3",
+                        "N2",
+                        "N1"
+                    ]
+                },
+                "order_index": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 160
+                },
+                "version": {
+                    "type": "integer"
+                },
+                "vocabulary": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_kotoba.VocabularyInput"
+                    }
+                }
+            }
+        },
+        "internal_kotoba.TopicResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_kotoba.Topic"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_kotoba.TopicsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_kotoba.Topic"
+                    }
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_kotoba.Vocabulary": {
+            "type": "object",
+            "properties": {
+                "audio_media_id": {
+                    "type": "string"
+                },
+                "audio_url": {
+                    "type": "string"
+                },
+                "example": {
+                    "$ref": "#/definitions/internal_kotoba.Example"
+                },
+                "furigana": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_kotoba.Furigana"
+                    }
+                },
+                "hiragana": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kanji": {
+                    "type": "string"
+                },
+                "order_index": {
+                    "type": "integer"
+                },
+                "romaji": {
+                    "type": "string"
+                },
+                "translation": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "Kata Benda",
+                        "Kata Kerja",
+                        "Kata Sifat",
+                        "Lainnya"
+                    ]
+                }
+            }
+        },
+        "internal_kotoba.VocabularyInput": {
+            "type": "object",
+            "properties": {
+                "audio_media_id": {
+                    "type": "string"
+                },
+                "example": {
+                    "$ref": "#/definitions/internal_kotoba.Example"
+                },
+                "furigana": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_kotoba.Furigana"
+                    }
+                },
+                "hiragana": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kanji": {
+                    "type": "string"
+                },
+                "romaji": {
+                    "type": "string"
+                },
+                "translation": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "Kata Benda",
+                        "Kata Kerja",
+                        "Kata Sifat",
+                        "Lainnya"
+                    ]
                 }
             }
         },

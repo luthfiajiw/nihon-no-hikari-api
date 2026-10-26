@@ -10,6 +10,8 @@ require (
 
 require (
 	github.com/gofiber/contrib/v3/swaggo v1.0.10
+	github.com/hajimehoshi/go-mp3 v0.3.4
+	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/swaggo/swag v1.16.6
 	golang.org/x/crypto v0.57.0
 )
@@ -37,7 +39,6 @@ require (
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/swaggo/files/v2 v2.0.2 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
@@ -60,5 +61,5 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/leodido/go-urn v1.5.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/text v0.42.0
 )

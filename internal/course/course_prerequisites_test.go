@@ -1,10 +1,12 @@
-package admin
+package course
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"nihon-no-hikari-api/internal/course/model"
 
 	"github.com/google/uuid"
 )
@@ -13,7 +15,7 @@ func TestPrerequisitesSurviveDraftRoundTrip(t *testing.T) {
 	parent, required := uuid.New(), uuid.New()
 	for _, kind := range []string{"module", "lesson"} {
 		for _, requiredIDs := range [][]uuid.UUID{nil, {}, {required}} {
-			input := coreInput{CourseID: parent, ModuleID: parent, Slug: "hiragana", Title: "Hiragana", IsEntry: true, Content: json.RawMessage(`{"content":"<p>あ</p>","tips":""}`)}
+			input := model.CoreInput{CourseID: parent, ModuleID: parent, Slug: "hiragana", Title: "Hiragana", IsEntry: true, Content: json.RawMessage(`{"content":"<p>あ</p>","tips":""}`)}
 			if kind == "module" {
 				input.ModulePrerequisites = requiredIDs
 			} else {

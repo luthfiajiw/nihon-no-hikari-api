@@ -1,4 +1,4 @@
-package admin
+package question
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 
 func TestParseSetChecksReadingAnswerAndPublication(t *testing.T) {
 	lessonID := uuid.New()
-	input := setInput{Kind: "practice", LessonID: &lessonID, Title: "Membaca", Skill: "reading", PassingScore: 80, Questions: []questionInput{{QuestionType: "multiple_choice", PromptText: "Baca huruf ini", StimulusText: stringPtr("あ"), Points: 1, Options: []optionInput{{Label: "a", IsCorrect: true}, {Label: "i", IsCorrect: false}}}}}
+	input := SetInput{Kind: "practice", LessonID: &lessonID, Title: "Membaca", Skill: "reading", PassingScore: 80, Questions: []QuestionInput{{QuestionType: "multiple_choice", PromptText: "Baca huruf ini", StimulusText: stringPtr("あ"), Points: 1, Options: []OptionInput{{Label: "a", IsCorrect: true}, {Label: "i", IsCorrect: false}}}}}
 	raw, _ := json.Marshal(input)
 	if _, err := parseSet(raw, true); err != nil {
 		t.Fatalf("valid reading set rejected: %v", err)
@@ -27,7 +27,7 @@ func TestParseSetChecksReadingAnswerAndPublication(t *testing.T) {
 	if _, err := parseSet(raw, true); err == nil {
 		t.Fatal("empty published set must be rejected")
 	}
-	input.Questions = []questionInput{{QuestionType: "multiple_choice", Points: 1}}
+	input.Questions = []QuestionInput{{QuestionType: "multiple_choice", Points: 1}}
 	raw, _ = json.Marshal(input)
 	if _, err := parseSet(raw, false); err != nil {
 		t.Fatalf("incomplete question draft rejected: %v", err)
@@ -39,7 +39,7 @@ func TestParseSetChecksReadingAnswerAndPublication(t *testing.T) {
 
 func TestParseSetRequiresWritingTemplate(t *testing.T) {
 	moduleID := uuid.New()
-	input := setInput{Kind: "final_exam", ModuleID: &moduleID, Title: "Menulis", Skill: "writing", PassingScore: 80, Questions: []questionInput{{QuestionType: "stroke_writing", PromptText: "Tulis あ", Points: 1}}}
+	input := SetInput{Kind: "final_exam", ModuleID: &moduleID, Title: "Menulis", Skill: "writing", PassingScore: 80, Questions: []QuestionInput{{QuestionType: "stroke_writing", PromptText: "Tulis あ", Points: 1}}}
 	raw, _ := json.Marshal(input)
 	if _, err := parseSet(raw, true); err == nil {
 		t.Fatal("writing question without template must be rejected")

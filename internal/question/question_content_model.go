@@ -1,95 +1,23 @@
-package model
+package question
 
 import (
 	"encoding/json"
 	"errors"
 	"net/url"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
-	"nihon-no-hikari-api/pkg/contenthtml"
 	"nihon-no-hikari-api/pkg/kanastroke"
 
 	"github.com/google/uuid"
 	"golang.org/x/text/unicode/norm"
 )
 
-var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
-
-type CoreInput struct {
-	LevelID             uuid.UUID       `json:"level_id"`
-	CourseID            uuid.UUID       `json:"course_id"`
-	ModuleID            uuid.UUID       `json:"module_id"`
-	Slug                string          `json:"slug"`
-	Title               string          `json:"title"`
-	Description         *string         `json:"description"`
-	ThumbnailURL        *string         `json:"thumbnail_url"`
-	OrderIndex          int16           `json:"order_index"`
-	IsMandatory         bool            `json:"is_mandatory"`
-	IsEntry             bool            `json:"is_entry"`
-	EstimatedMinutes    *int32          `json:"estimated_minutes"`
-	Content             json.RawMessage `json:"content"`
-	ModulePrerequisites []uuid.UUID     `json:"module_prerequisites"`
-	LessonPrerequisites []uuid.UUID     `json:"lesson_prerequisites"`
-}
-
-func (v *CoreInput) Validate(kind string) error {
-	if !slugPattern.MatchString(v.Slug) || len(v.Slug) > 120 || strings.TrimSpace(v.Title) == "" || len(v.Title) > 160 || v.OrderIndex < 0 {
-		return errors.New("slug, judul, atau urutan tidak valid")
-	}
-	switch kind {
-	case "course":
-		if v.LevelID == uuid.Nil {
-			return errors.New("level wajib dipilih")
-		}
-	case "module":
-		if v.CourseID == uuid.Nil {
-			return errors.New("kursus wajib dipilih")
-		}
-	case "lesson":
-		if v.ModuleID == uuid.Nil {
-			return errors.New("module wajib dipilih")
-		}
-		clean, err := contenthtml.JSON(v.Content)
-		if err != nil {
-			return err
-		}
-		v.Content = clean
-	}
-	if v.ThumbnailURL != nil && *v.ThumbnailURL != "" {
-		u, err := url.Parse(*v.ThumbnailURL)
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return errors.New("URL gambar tidak valid")
-		}
-	}
-	if v.EstimatedMinutes != nil && *v.EstimatedMinutes < 0 {
-		return errors.New("estimasi waktu tidak valid")
-	}
-	for _, requiredID := range v.Prerequisites(kind) {
-		if requiredID == uuid.Nil {
-			return errors.New("ID prasyarat tidak valid")
-		}
-	}
-	return nil
-}
-
-func (v CoreInput) Prerequisites(kind string) []uuid.UUID {
-	switch kind {
-	case "module":
-		return v.ModulePrerequisites
-	case "lesson":
-		return v.LessonPrerequisites
-	default:
-		return nil
-	}
-}
-
 type OptionInput struct {
 	Label     string  `json:"label" example:"a"`
 	MediaURL  *string `json:"media_url" example:"https://example.com/option.png"`
 	IsCorrect bool    `json:"is_correct"`
-} // @name internal_admin.optionInput
+} // @name internal_question.OptionInput
 
 type QuestionInput struct {
 	QuestionType     string        `json:"question_type" enums:"multiple_choice,stroke_writing"`
@@ -101,7 +29,7 @@ type QuestionInput struct {
 	StrokeTemplateID *uuid.UUID    `json:"stroke_template_id" format:"uuid"`
 	ShowWritingGuide bool          `json:"show_writing_guide"`
 	Options          []OptionInput `json:"options"`
-} // @name internal_admin.questionInput
+} // @name internal_question.QuestionInput
 
 type SetInput struct {
 	Kind             string          `json:"kind"`
@@ -185,35 +113,13 @@ func validMediaURL(raw *string) bool {
 	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
 }
 
-type ReorderRequest struct {
-	ParentID   uuid.UUID   `json:"parent_id" swaggertype:"string" format:"uuid"`
-	OrderedIDs []uuid.UUID `json:"ordered_ids" swaggertype:"array,string"`
-} // @name internal_admin.ReorderRequest
-
-func (input ReorderRequest) Validate(kind string) error {
-	if kind != "module" && kind != "lesson" {
-		return errors.New("jenis konten tidak valid")
-	}
-	if input.ParentID == uuid.Nil || input.OrderedIDs == nil || len(input.OrderedIDs) > 32768 {
-		return errors.New("parent atau jumlah konten tidak valid")
-	}
-	seen := make(map[uuid.UUID]bool, len(input.OrderedIDs))
-	for _, id := range input.OrderedIDs {
-		if id == uuid.Nil || seen[id] {
-			return errors.New("ID konten tidak valid atau berulang")
-		}
-		seen[id] = true
-	}
-	return nil
-}
-
 type StrokeTemplateInput struct {
 	Script        string  `json:"script" enums:"hiragana,katakana"`
 	Character     string  `json:"character" example:"あ"`
 	Romaji        string  `json:"romaji" example:"a"`
 	SourceVersion string  `json:"source_version" example:"r20260714"`
 	SVGContent    *string `json:"svg_content,omitempty"`
-} // @name internal_admin.StrokeTemplateInput
+} // @name internal_question.StrokeTemplateInput
 
 func (input *StrokeTemplateInput) Validate() error {
 	input.Script = strings.TrimSpace(input.Script)
@@ -238,4 +144,99 @@ func (input *StrokeTemplateInput) Validate() error {
 		return kanastroke.ErrTooLarge
 	}
 	return nil
+}
+
+type StatusResponse struct {
+	Success bool `json:"success" example:"true"`
+} // @name internal_question.StatusResponse
+
+type CreateResponse struct {
+	Success bool      `json:"success" example:"true"`
+	ID      uuid.UUID `json:"id" format:"uuid"`
+} // @name internal_question.CreateResponse
+
+type UpdateResponse struct {
+	Success bool `json:"success" example:"true"`
+	// True jika konten sudah diterbitkan. Perubahan question_set selalu disimpan sebagai draft.
+	Draft bool `json:"draft"`
+} // @name internal_question.UpdateResponse
+
+type PublishResponse struct {
+	Success bool `json:"success" example:"true"`
+	// Hanya untuk question_set; dapat berubah saat versi baru diterbitkan.
+	ID *uuid.UUID `json:"id,omitempty" format:"uuid"`
+} // @name internal_question.PublishResponse
+
+type RemoveResponse struct {
+	Success bool `json:"success" example:"true"`
+	// True jika diarsipkan karena memiliki riwayat atau relasi; false jika dihapus permanen.
+	Archived bool `json:"archived"`
+} // @name internal_question.RemoveResponse
+
+type ContentListResponse struct {
+	Success bool `json:"success" example:"true"`
+	// Kolom resource sesuai kind, tanpa content lesson; course menyertakan module_count dan lesson_count.
+	Data []json.RawMessage `json:"data" swaggertype:"array,object"`
+} // @name internal_question.ContentListResponse
+
+type ContentDetailResponse struct {
+	Success bool `json:"success" example:"true"`
+	// Kolom resource sesuai kind; question_set menyertakan questions, options, dan is_correct.
+	Data json.RawMessage `json:"data" swaggertype:"object"`
+	// Payload perubahan yang belum diterbitkan, atau null jika tidak ada draft.
+	Draft json.RawMessage `json:"draft" swaggertype:"object"`
+} // @name internal_question.ContentDetailResponse
+
+type StrokeTemplate struct {
+	ID            uuid.UUID `json:"id" format:"uuid"`
+	Character     string    `json:"character" example:"あ"`
+	Romaji        string    `json:"romaji" example:"a"`
+	Script        string    `json:"script" enums:"hiragana,katakana"`
+	SourceVersion string    `json:"source_version"`
+	StrokeCount   int       `json:"stroke_count"`
+} // @name internal_question.StrokeTemplate
+
+type TemplatesResponse struct {
+	Success bool             `json:"success" example:"true"`
+	Data    []StrokeTemplate `json:"data"`
+} // @name internal_question.TemplatesResponse
+
+type StrokeTemplateDetail struct {
+	StrokeTemplate
+	StrokeData kanastroke.Data `json:"stroke_data"`
+} // @name internal_question.StrokeTemplateDetail
+
+type StrokeTemplateResponse struct {
+	Success bool                 `json:"success"`
+	Data    StrokeTemplateDetail `json:"data"`
+} // @name internal_question.StrokeTemplateResponse
+
+type StrokeTemplatePreview struct {
+	Script        string          `json:"script"`
+	Character     string          `json:"character"`
+	Romaji        string          `json:"romaji"`
+	SourceVersion string          `json:"source_version"`
+	StrokeCount   int             `json:"stroke_count"`
+	StrokeData    kanastroke.Data `json:"stroke_data"`
+} // @name internal_question.StrokeTemplatePreview
+
+type StrokeTemplatePreviewResponse struct {
+	Success bool                  `json:"success"`
+	Data    StrokeTemplatePreview `json:"data"`
+} // @name internal_question.StrokeTemplatePreviewResponse
+
+type ContentState struct {
+	Published bool
+	Archived  bool
+}
+
+type QuestionSetState struct {
+	ContentState
+	LineageID   uuid.UUID
+	Version     int
+	HasAttempts bool
+	Kind        string
+	Skill       *string
+	LessonID    *uuid.UUID
+	ModuleID    *uuid.UUID
 }

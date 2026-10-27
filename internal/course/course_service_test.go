@@ -11,6 +11,7 @@ import (
 )
 
 type lessonProgressRepositoryStub struct {
+	ContentRepository
 	upsertCalled bool
 	lesson       *model.LessonDetail
 }
@@ -32,6 +33,7 @@ func (r *lessonProgressRepositoryStub) GetLessonDetail(context.Context, uuid.UUI
 }
 
 type questionRepositoryStub struct {
+	question.CatalogReader
 	sets             []question.QuestionSet
 	receivedLessonID uuid.UUID
 	receivedUserID   uuid.UUID
@@ -74,7 +76,7 @@ func (r *lessonProgressRepositoryStub) UpsertLessonProgress(context.Context, uui
 
 func TestUpsertLessonProgressDelegatesCompletionPolicy(t *testing.T) {
 	repository := &lessonProgressRepositoryStub{}
-	service := NewService(repository, nil)
+	service := NewService(nil, repository, nil)
 	status := model.StatusCompleted
 
 	_, err := service.UpsertLessonProgress(context.Background(), uuid.New(), uuid.New(), model.UpsertLessonProgressRequest{Status: &status})
@@ -96,7 +98,7 @@ func TestGetLessonDetailIncludesQuestionSets(t *testing.T) {
 	questionRepository := &questionRepositoryStub{
 		sets: []question.QuestionSet{{ID: setID, LessonID: &lessonID, Title: "Latihan"}},
 	}
-	service := NewService(courseRepository, questionRepository)
+	service := NewService(nil, courseRepository, questionRepository)
 
 	response, err := service.GetLessonDetail(context.Background(), lessonID, userID)
 	if err != nil {

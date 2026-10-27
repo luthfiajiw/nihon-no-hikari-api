@@ -1,4 +1,4 @@
-package admin
+package question
 
 import (
 	"encoding/json"
@@ -7,13 +7,11 @@ import (
 )
 
 var (
-	ErrInvalidInput         = errors.New("input tidak valid")
-	ErrNotFound             = errors.New("konten tidak ditemukan")
-	ErrConflict             = errors.New("konflik konten")
-	ErrInvalidRelation      = errors.New("relasi atau konfigurasi konten tidak valid")
-	ErrStaleOrder           = errors.New("daftar konten telah berubah. Muat ulang dan coba lagi")
-	ErrPayloadTooLarge      = errors.New("payload terlalu besar")
-	errInvalidPrerequisites = errors.New("prasyarat tidak valid")
+	ErrInvalidInput    = errors.New("input tidak valid")
+	ErrNotFound        = errors.New("konten tidak ditemukan")
+	ErrConflict        = errors.New("konflik konten")
+	ErrInvalidRelation = errors.New("relasi atau konfigurasi konten tidak valid")
+	ErrPayloadTooLarge = errors.New("payload terlalu besar")
 )
 
 // applicationError keeps the public message separate from its classification.
@@ -52,8 +50,11 @@ func decodeError(err error) error {
 	message := strings.NewReplacer(
 		"model.CoreInput", "admin.coreInput",
 		"model.SetInput", "admin.setInput",
+		"question.SetInput", "admin.setInput",
 		"model.QuestionInput", "admin.questionInput",
+		"question.QuestionInput", "admin.questionInput",
 		"model.OptionInput", "admin.optionInput",
+		"question.OptionInput", "admin.optionInput",
 	).Replace(copy.Error())
 	return errors.New(message)
 }

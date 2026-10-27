@@ -8,6 +8,7 @@ import (
 )
 
 type serviceRepositoryStub struct {
+	ContentRepository
 	detail             *QuestionSetDetail
 	abandonErr         error
 	abandonCalled      bool
@@ -59,7 +60,7 @@ func TestGetQuestionSetDetail(t *testing.T) {
 			}},
 		},
 	}
-	service := NewService(repository)
+	service := NewService(nil, repository)
 
 	response, err := service.GetQuestionSetDetail(context.Background(), questionSetID, uuid.New())
 	if err != nil {
@@ -75,7 +76,7 @@ func TestGetQuestionSetDetail(t *testing.T) {
 
 func TestAbandonAttempt(t *testing.T) {
 	repository := &serviceRepositoryStub{}
-	service := NewService(repository)
+	service := NewService(nil, repository)
 	attemptID := uuid.New()
 	userID := uuid.New()
 

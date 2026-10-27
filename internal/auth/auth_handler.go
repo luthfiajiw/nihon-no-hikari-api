@@ -2,24 +2,29 @@ package auth
 
 import (
 	"errors"
+
+	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/gofiber/fiber/v3"
 )
 
 type Handler struct {
-	service   Service
-	validator utils.BodyValidator
+	service    Service
+	validator  utils.BodyValidator
+	middleware middleware.Middleware
 }
 
-func NewHandler(s Service, v utils.BodyValidator) *Handler {
+func NewHandler(s Service, v utils.BodyValidator, m middleware.Middleware) *Handler {
 	return &Handler{
-		service:   s,
-		validator: v,
+		service:    s,
+		validator:  v,
+		middleware: m,
 	}
 }
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
+	app.Get("/api/v1/admin/me", h.middleware.AuthMiddleware(), h.middleware.RequireRole("Admin"), h.me)
 	authGroup := app.Group("/api/v1/auth")
 	authGroup.Post("/register", h.register)
 	authGroup.Post("/signin", h.signIn)
@@ -224,4 +229,18 @@ func (h *Handler) signout(c fiber.Ctx) error {
 		Success: true,
 		Message: "berhasil keluar",
 	})
+}
+
+// me godoc
+// @Summary Periksa akses admin
+// @Description Memastikan sesi pengguna memiliki role Admin.
+// @Tags Admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} MeResponse
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Router /admin/me [get]
+func (h *Handler) me(c fiber.Ctx) error {
+	return c.JSON(MeResponse{Success: true, Role: "Admin"})
 }

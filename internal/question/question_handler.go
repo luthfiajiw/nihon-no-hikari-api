@@ -20,6 +20,20 @@ func NewHandler(service Service, middleware middleware.Middleware) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
+	admin := app.Group("/api/v1/admin", h.middleware.AuthMiddleware(), h.middleware.RequireRole("Admin"))
+	admin.Get("/question-sets", h.adminList)
+	admin.Post("/question-sets", h.adminCreate)
+	admin.Get("/question-sets/:id", h.adminDetail)
+	admin.Patch("/question-sets/:id", h.adminUpdate)
+	admin.Delete("/question-sets/:id", h.adminRemove)
+	admin.Post("/question-sets/:id/publish", h.adminPublish)
+	admin.Post("/question-sets/:id/restore", h.adminRestore)
+	admin.Post("/templates/preview", h.previewTemplate)
+	admin.Get("/templates", h.templates)
+	admin.Post("/templates", h.createTemplate)
+	admin.Get("/templates/:id", h.templateDetail)
+	admin.Patch("/templates/:id", h.updateTemplate)
+
 	group := app.Group("/api/v1/question-sets", h.middleware.AuthMiddleware())
 	group.Get("", h.listQuestionSets)
 	group.Get("/:questionSetId", h.getQuestionSetDetail)

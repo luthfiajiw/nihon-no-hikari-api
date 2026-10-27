@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+
 	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/utils"
 

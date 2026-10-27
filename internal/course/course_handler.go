@@ -2,6 +2,7 @@ package course
 
 import (
 	"errors"
+
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/utils"
@@ -20,6 +21,16 @@ func NewHandler(service Service, middleware middleware.Middleware) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
+	admin := app.Group("/api/v1/admin", h.middleware.AuthMiddleware(), h.middleware.RequireRole("Admin"))
+	admin.Get("/catalog", h.catalog)
+	admin.Get("/levels", h.levels)
+	admin.Post("/lessons/preview", h.preview)
+	admin.Post("/modules/reorder", func(c fiber.Ctx) error { return h.adminReorder(c, "module") })
+	admin.Post("/lessons/reorder", func(c fiber.Ctx) error { return h.adminReorder(c, "lesson") })
+	h.registerAdminContent(admin, "/courses", "course")
+	h.registerAdminContent(admin, "/modules", "module")
+	h.registerAdminContent(admin, "/lessons", "lesson")
+
 	courseGroup := app.Group("/api/v1/courses", h.middleware.AuthMiddleware())
 	courseGroup.Get("", h.list)
 	courseGroup.Get("/:courseId", h.getDetail)

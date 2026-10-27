@@ -3,14 +3,17 @@ package course
 import (
 	"context"
 	"fmt"
+
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/internal/question"
+	"nihon-no-hikari-api/pkg/db"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 )
 
 type Service interface {
+	ContentService
 	GetList(ctx context.Context) (*model.ListCourseResponse, error)
 	GetDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetailResponse, error)
 	GetLessons(ctx context.Context, courseID, userID uuid.UUID) (*model.ListLessonResponse, error)
@@ -98,12 +101,13 @@ func (s *service) GetLessons(ctx context.Context, courseID, userID uuid.UUID) (*
 }
 
 type service struct {
+	tx                 db.WithTx
 	repository         Repository
-	questionRepository question.Repository
+	questionRepository QuestionReader
 }
 
-func NewService(repository Repository, questionRepository question.Repository) Service {
-	return &service{repository: repository, questionRepository: questionRepository}
+func NewService(tx db.WithTx, repository Repository, questionRepository QuestionReader) Service {
+	return &service{tx: tx, repository: repository, questionRepository: questionRepository}
 }
 
 func (s *service) GetList(ctx context.Context) (*model.ListCourseResponse, error) {
@@ -117,4 +121,10 @@ func (s *service) GetList(ctx context.Context) (*model.ListCourseResponse, error
 		Message: "berhasil mendapatkan daftar kursus",
 		Data:    courses,
 	}, nil
+}
+
+// QuestionReader is the read-only dependency used for lessons and the admin catalog.
+type QuestionReader interface {
+	question.CatalogReader
+	ListQuestionSets(context.Context, uuid.UUID, uuid.UUID) ([]question.QuestionSet, error)
 }

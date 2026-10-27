@@ -1,8 +1,9 @@
 package auth
 
 import (
-	"nihon-no-hikari-api/internal/user"
 	"time"
+
+	"nihon-no-hikari-api/internal/user"
 
 	"github.com/google/uuid"
 )
@@ -67,3 +68,8 @@ type RefreshTokenResponse struct {
 type LogoutRequest struct {
 	ID string `json:"session_id" validate:"required"`
 }
+
+type MeResponse struct {
+	Success bool   `json:"success" example:"true"`
+	Role    string `json:"role" example:"Admin" enums:"Admin"`
+} // @name internal_auth.MeResponse

@@ -15,6 +15,7 @@ import (
 )
 
 type Repository interface {
+	ContentRepository
 	ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) ([]QuestionSet, error)
 	ListModuleExams(ctx context.Context, moduleID, userID uuid.UUID) ([]QuestionSet, error)
 	GetQuestionSetDetail(ctx context.Context, questionSetID, userID uuid.UUID) (*QuestionSetDetail, error)
@@ -96,11 +97,12 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, questionSetID, 
 }
 
 type dbRepository struct {
-	pool *pgxpool.Pool
+	query dbQuerier
+	pool  *pgxpool.Pool
 }
 
 func NewRepository(pool *pgxpool.Pool) Repository {
-	return &dbRepository{pool: pool}
+	return &dbRepository{pool: pool, query: pool}
 }
 
 func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) ([]QuestionSet, error) {

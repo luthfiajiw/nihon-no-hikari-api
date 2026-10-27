@@ -3,6 +3,7 @@ package course
 import (
 	"context"
 	"errors"
+
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/contenthtml"
 	"nihon-no-hikari-api/pkg/utils"
@@ -13,6 +14,7 @@ import (
 )
 
 type Repository interface {
+	ContentRepository
 	List(ctx context.Context) ([]model.Course, error)
 	GetCourseDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetail, error)
 	ListLessons(ctx context.Context, courseID, userID uuid.UUID) ([]model.ModuleLesson, error)
@@ -455,11 +457,12 @@ func (r *dbRepository) listModules(ctx context.Context, courseID, userID uuid.UU
 }
 
 type dbRepository struct {
-	pool *pgxpool.Pool
+	query dbQuerier
+	pool  *pgxpool.Pool
 }
 
 func NewRepository(pool *pgxpool.Pool) Repository {
-	return &dbRepository{pool: pool}
+	return &dbRepository{pool: pool, query: pool}
 }
 
 func (r *dbRepository) List(ctx context.Context) ([]model.Course, error) {

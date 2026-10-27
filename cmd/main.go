@@ -5,7 +5,6 @@ import (
 	"log"
 	"nihon-no-hikari-api/config"
 	_ "nihon-no-hikari-api/docs"
-	"nihon-no-hikari-api/internal/admin"
 	"nihon-no-hikari-api/internal/auth"
 	"nihon-no-hikari-api/internal/course"
 	"nihon-no-hikari-api/internal/kotoba"
@@ -59,14 +58,12 @@ func main() {
 	authRepo := auth.NewRepository(pool)
 	courseRepo := course.NewRepository(pool)
 	questionRepo := question.NewRepository(pool)
-	adminRepo := admin.NewRepository(pool)
 	kotobaRepo := kotoba.NewRepository(pool)
 
 	// SERVICES
 	authService := auth.NewService(tx, cfg, authRepo, userRepo)
-	courseService := course.NewService(courseRepo, questionRepo)
-	questionService := question.NewService(questionRepo)
-	adminService := admin.NewService(tx, adminRepo)
+	courseService := course.NewService(tx, courseRepo, questionRepo)
+	questionService := question.NewService(tx, questionRepo)
 	storage := supabasestorage.New(cfg.SupabaseURL, cfg.SupabaseServiceKey, nil)
 	kotobaService := kotoba.NewService(tx, kotobaRepo, storage, cfg.KotobaCoverBucket, cfg.KotobaAudioBucket)
 	cleanupCtx, stopCleanup := context.WithCancel(context.Background())
@@ -77,11 +74,10 @@ func main() {
 	authMiddleware := middleware.New(cfg, pool)
 
 	// HANDLERS
-	authHandler := auth.NewHandler(authService, bodyValidator)
+	authHandler := auth.NewHandler(authService, bodyValidator, authMiddleware)
 	courseHandler := course.NewHandler(courseService, authMiddleware)
 	questionHandler := question.NewHandler(questionService, authMiddleware)
 	userHandler := user.NewHandler(pool, authMiddleware)
-	adminHandler := admin.NewHandler(adminService, authMiddleware)
 	speechHandler := speech.NewHandler(cfg, courseRepo, authMiddleware)
 	kotobaHandler := kotoba.NewHandler(kotobaService, authMiddleware)
 
@@ -94,7 +90,6 @@ func main() {
 	courseHandler.RegisterRoutes(app)
 	questionHandler.RegisterRoutes(app)
 	userHandler.RegisterRoutes(app)
-	adminHandler.RegisterRoutes(app)
 	speechHandler.RegisterRoutes(app)
 	kotobaHandler.RegisterRoutes(app)
 

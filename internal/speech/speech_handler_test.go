@@ -7,12 +7,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"nihon-no-hikari-api/config"
-	"nihon-no-hikari-api/internal/course/model"
-	"nihon-no-hikari-api/pkg/utils"
 	"strings"
 	"testing"
 	"time"
+
+	"nihon-no-hikari-api/config"
+	"nihon-no-hikari-api/internal/course/model"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"

@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"nihon-no-hikari-api/pkg/db"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 )
 
 type Service interface {
+	ContentService
 	ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) (*ListQuestionSetsResponse, error)
 	ListModuleExams(ctx context.Context, moduleID, userID uuid.UUID) (*ListQuestionSetsResponse, error)
 	GetQuestionSetDetail(ctx context.Context, questionSetID, userID uuid.UUID) (*QuestionSetDetailResponse, error)
@@ -31,11 +33,12 @@ func (s *service) GetQuestionSetDetail(ctx context.Context, questionSetID, userI
 }
 
 type service struct {
+	tx         db.WithTx
 	repository Repository
 }
 
-func NewService(repository Repository) Service {
-	return &service{repository: repository}
+func NewService(tx db.WithTx, repository Repository) Service {
+	return &service{tx: tx, repository: repository}
 }
 
 func (s *service) ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) (*ListQuestionSetsResponse, error) {

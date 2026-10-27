@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"

@@ -82,7 +82,7 @@ real authentication/role, atomic update, and attempt snapshot integration tests:
 
 ```powershell
 $env:KANA_TEMPLATE_TEST_DATABASE_URL = 'postgresql://postgres@127.0.0.1:55439/postgres?sslmode=disable'
-go test ./internal/admin ./internal/question -run 'Templates|TemplateInput|WritingSnapshot' -v
+go test ./internal/question -run 'Templates|TemplateInput|WritingSnapshot' -v
 ```
 
 Use an isolated PostgreSQL instance. Tests create a uniquely named database,

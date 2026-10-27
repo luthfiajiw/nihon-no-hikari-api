@@ -1,4 +1,4 @@
-package admin
+package course
 
 import (
 	"context"
@@ -9,23 +9,25 @@ import (
 	"strings"
 	"testing"
 
+	"nihon-no-hikari-api/internal/course/model"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type handlerServiceStub struct {
+type contentHandlerServiceStub struct {
 	Service
-	list   func(context.Context, string) (ContentListResponse, error)
-	create func(context.Context, string, coreInput) (CreateResponse, error)
+	list   func(context.Context, string) (model.ContentListResponse, error)
+	create func(context.Context, string, model.CoreInput) (model.CreateResponse, error)
 }
 
-func (s *handlerServiceStub) ListContent(c context.Context, k string) (ContentListResponse, error) {
+func (s *contentHandlerServiceStub) ListAdminContent(c context.Context, k string) (model.ContentListResponse, error) {
 	return s.list(c, k)
 }
 
-func (s *handlerServiceStub) CreateContent(c context.Context, k string, v coreInput) (CreateResponse, error) {
+func (s *contentHandlerServiceStub) CreateAdminContent(c context.Context, k string, v model.CoreInput) (model.CreateResponse, error) {
 	return s.create(c, k, v)
 }
 
@@ -46,17 +48,17 @@ func TestHandlerMapsServiceErrorsWithoutDatabase(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			called := false
-			stub := &handlerServiceStub{list: func(_ context.Context, kind string) (ContentListResponse, error) {
+			stub := &contentHandlerServiceStub{list: func(_ context.Context, kind string) (model.ContentListResponse, error) {
 				if kind != "lesson" {
 					t.Fatal(kind)
 				}
 				called = true
-				return ContentListResponse{}, tc.err
+				return model.ContentListResponse{}, tc.err
 			}}
 			h := NewHandler(stub, nil)
 			app := fiber.New()
-			app.Get("/content/:kind", h.list)
-			res, err := app.Test(httptest.NewRequest("GET", "/content/lesson", nil))
+			app.Get("/lessons", func(c fiber.Ctx) error { return h.adminList(c, "lesson") })
+			res, err := app.Test(httptest.NewRequest("GET", "/lessons", nil))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -74,17 +76,17 @@ func TestHandlerMapsServiceErrorsWithoutDatabase(t *testing.T) {
 
 func TestHandlerForwardsRequestAndReturnsTypedResult(t *testing.T) {
 	parent, id := uuid.New(), uuid.New()
-	stub := &handlerServiceStub{create: func(_ context.Context, kind string, v coreInput) (CreateResponse, error) {
+	stub := &contentHandlerServiceStub{create: func(_ context.Context, kind string, v model.CoreInput) (model.CreateResponse, error) {
 		if kind != "module" || v.CourseID != parent || v.Title != "Full payload" || v.ModulePrerequisites == nil || len(v.ModulePrerequisites) != 0 {
 			t.Fatalf("incorrect input: %+v", v)
 		}
-		return CreateResponse{Success: true, ID: id}, nil
+		return model.CreateResponse{Success: true, ID: id}, nil
 	}}
 	h := NewHandler(stub, nil)
 	app := fiber.New()
-	app.Post("/content/:kind", h.create)
+	app.Post("/modules", func(c fiber.Ctx) error { return h.adminCreate(c, "module") })
 	raw := fmt.Sprintf(`{"course_id":%q,"title":"Full payload","module_prerequisites":[]}`, parent)
-	req := httptest.NewRequest("POST", "/content/module", strings.NewReader(raw))
+	req := httptest.NewRequest("POST", "/modules", strings.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
 	res, err := app.Test(req)
 	if err != nil {
@@ -123,9 +125,9 @@ func TestResponseEnvelopesPreserveNullAndOmittedFields(t *testing.T) {
 		value any
 		want  string
 	}{
-		{PublishResponse{Success: true}, `{"success":true}`},
-		{ContentDetailResponse{Success: true, Data: json.RawMessage(`{}`)}, `{"success":true,"data":{},"draft":null}`},
-		{ContentListResponse{Success: true, Data: []json.RawMessage{}}, `{"success":true,"data":[]}`},
+		{model.PublishResponse{Success: true}, `{"success":true}`},
+		{model.ContentDetailResponse{Success: true, Data: json.RawMessage(`{}`)}, `{"success":true,"data":{},"draft":null}`},
+		{model.ContentListResponse{Success: true, Data: []json.RawMessage{}}, `{"success":true,"data":[]}`},
 	} {
 		raw, err := json.Marshal(tc.value)
 		if err != nil || string(raw) != tc.want {

@@ -1,3 +1,13 @@
+## Backend module conventions
+
+Follow [the backend module conventions](docs/backend-module-conventions.md) for
+domain ownership, administrative route registration, and Go file naming.
+Every Go file in `internal/<module>` starts with its module name. Main layers use
+`[module]_[layer].go`; feature layers and helpers keep the module prefix, and tests
+end with `_test.go`. Preserve each existing module's folder and layer structure.
+Administrative handlers live in their owning domain; do not recreate a central
+admin module or a dispatcher across domains.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

@@ -1,4 +1,4 @@
-package admin
+package course
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/db"
 
 	"github.com/gofiber/fiber/v3"
@@ -20,7 +21,7 @@ import (
 
 func TestParseReorder(t *testing.T) {
 	parent, id := uuid.New(), uuid.New()
-	valid, _ := json.Marshal(ReorderRequest{ParentID: parent, OrderedIDs: []uuid.UUID{id}})
+	valid, _ := json.Marshal(model.ReorderRequest{ParentID: parent, OrderedIDs: []uuid.UUID{id}})
 	for _, kind := range []string{"module", "lesson"} {
 		if _, err := validatedReorderInput(kind, valid); err != nil {
 			t.Fatal(err)
@@ -39,7 +40,7 @@ func TestParseReorder(t *testing.T) {
 	if _, err := validatedReorderInput("course", valid); err == nil {
 		t.Fatal("accepted course reordering")
 	}
-	tooMany := ReorderRequest{ParentID: parent, OrderedIDs: make([]uuid.UUID, 32769)}
+	tooMany := model.ReorderRequest{ParentID: parent, OrderedIDs: make([]uuid.UUID, 32769)}
 	raw, _ := json.Marshal(tooMany)
 	if _, err := validatedReorderInput("lesson", raw); err == nil {
 		t.Fatal("accepted smallint overflow")
@@ -94,10 +95,10 @@ func TestReorderDatabase(t *testing.T) {
 		content jsonb, order_index smallint NOT NULL, is_entry boolean NOT NULL DEFAULT false, is_published boolean NOT NULL DEFAULT false,
 		archived_at timestamptz, updated_at timestamptz DEFAULT now());
 		CREATE TABLE admin_drafts(resource_type text NOT NULL, resource_id uuid NOT NULL, payload jsonb NOT NULL, updated_at timestamptz DEFAULT now(), PRIMARY KEY(resource_type,resource_id));`)
-	h := &Handler{service: NewService(db.NewTx(pool), NewRepository(pool))}
+	h := &Handler{service: NewService(db.NewTx(pool), NewRepository(pool), nil)}
 	app := fiber.New()
-	app.Post("/content/:kind/reorder", h.reorder)
-	app.Post("/content/:kind/:id/publish", h.publish)
+	app.Post("/:kind/reorder", func(c fiber.Ctx) error { return h.adminReorder(c, strings.TrimSuffix(c.Params("kind"), "s")) })
+	app.Post("/:kind/:id/publish", func(c fiber.Ctx) error { return h.adminPublish(c, strings.TrimSuffix(c.Params("kind"), "s")) })
 	post := func(path string, payload any, status int) {
 		t.Helper()
 		raw, _ := json.Marshal(payload)
@@ -137,10 +138,10 @@ func TestReorderDatabase(t *testing.T) {
 			exec(`INSERT INTO admin_drafts(resource_type,resource_id,payload) VALUES($1,$2,$3::jsonb)`, kind, ids[0], string(raw))
 			movedDraft := fmt.Sprintf(`{"%s":%q,"title":"Move later","order_index":19}`, parentField, otherParent)
 			exec(`INSERT INTO admin_drafts(resource_type,resource_id,payload) VALUES($1,$2,$3::jsonb)`, kind, ids[1], movedDraft)
-			path := "/content/" + kind + "/reorder"
-			post(path, ReorderRequest{ParentID: parent, OrderedIDs: []uuid.UUID{ids[0], ids[1], foreign}}, 409)
-			post(path, ReorderRequest{ParentID: parent, OrderedIDs: ids[:2]}, 409)
-			post(path, ReorderRequest{ParentID: uuid.New(), OrderedIDs: ids}, 404)
+			path := "/" + kind + "s" + "/reorder"
+			post(path, model.ReorderRequest{ParentID: parent, OrderedIDs: []uuid.UUID{ids[0], ids[1], foreign}}, 409)
+			post(path, model.ReorderRequest{ParentID: parent, OrderedIDs: ids[:2]}, 409)
+			post(path, model.ReorderRequest{ParentID: uuid.New(), OrderedIDs: ids}, 404)
 			assertOrder := func(expected []uuid.UUID) {
 				t.Helper()
 				rows, err := pool.Query(ctx, fmt.Sprintf(`SELECT id FROM %ss WHERE %s=$1 ORDER BY order_index`, kind, parentField), parent)
@@ -156,10 +157,10 @@ func TestReorderDatabase(t *testing.T) {
 			exec(`CREATE FUNCTION fail_reorder_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected failure'; END $$;
 				CREATE TRIGGER fail_reorder BEFORE UPDATE ON admin_drafts FOR EACH ROW EXECUTE FUNCTION fail_reorder_test();`)
 			reversed := []uuid.UUID{ids[2], ids[1], ids[0]}
-			post(path, ReorderRequest{ParentID: parent, OrderedIDs: reversed}, 500)
+			post(path, model.ReorderRequest{ParentID: parent, OrderedIDs: reversed}, 500)
 			assertOrder(ids)
 			exec(`DROP TRIGGER fail_reorder ON admin_drafts; DROP FUNCTION fail_reorder_test();`)
-			post(path, ReorderRequest{ParentID: parent, OrderedIDs: reversed}, 200)
+			post(path, model.ReorderRequest{ParentID: parent, OrderedIDs: reversed}, 200)
 			assertOrder(reversed)
 			var updated map[string]any
 			if err := pool.QueryRow(ctx, `SELECT payload FROM admin_drafts WHERE resource_type=$1 AND resource_id=$2`, kind, ids[0]).Scan(&updated); err != nil {
@@ -175,7 +176,7 @@ func TestReorderDatabase(t *testing.T) {
 			if destinationOrder != 19 {
 				t.Fatal("changed a draft destined for another parent")
 			}
-			post("/content/"+kind+"/"+ids[0].String()+"/publish", nil, 200)
+			post("/"+kind+"s"+"/"+ids[0].String()+"/publish", nil, 200)
 			assertOrder(reversed)
 			var title string
 			if err := pool.QueryRow(ctx, fmt.Sprintf(`SELECT title FROM %ss WHERE id=$1`, kind), ids[0]).Scan(&title); err != nil || title != "Pending material" {
@@ -185,8 +186,8 @@ func TestReorderDatabase(t *testing.T) {
 	}
 }
 
-func validatedReorderInput(kind string, raw []byte) (ReorderRequest, error) {
-	var input ReorderRequest
+func validatedReorderInput(kind string, raw []byte) (model.ReorderRequest, error) {
+	var input model.ReorderRequest
 	if err := json.Unmarshal(raw, &input); err != nil {
 		return input, err
 	}

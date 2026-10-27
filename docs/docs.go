@@ -43,7 +43,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.CatalogResponse"
+                            "$ref": "#/definitions/internal_course.CatalogResponse"
                         }
                     },
                     "400": {
@@ -73,41 +73,26 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/content/{kind}": {
+        "/admin/courses": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Memerlukan role Admin. Mengambil seluruh resource sesuai kind, termasuk yang belum diterbitkan dan diarsipkan, berdasarkan order_index, created_at, dan id. Content lesson tidak disertakan; course menyertakan module_count dan lesson_count.",
+                "description": "Memerlukan role Admin. Mengambil seluruh resource domain ini termasuk draft dan arsip, berdasarkan order_index, created_at, dan id.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Admin Content"
+                    "Course Admin"
                 ],
                 "summary": "Daftar konten admin",
-                "parameters": [
-                    {
-                        "enum": [
-                            "course",
-                            "module",
-                            "lesson",
-                            "question_set"
-                        ],
-                        "type": "string",
-                        "description": "Jenis resource",
-                        "name": "kind",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.ContentListResponse"
+                            "$ref": "#/definitions/internal_course.ContentListResponse"
                         }
                     },
                     "400": {
@@ -142,7 +127,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Memerlukan role Admin. Membuat resource yang belum diterbitkan. Kirim field sesuai kind: course memerlukan level_id dan slug; module memerlukan course_id dan slug; lesson memerlukan module_id dan slug. Title wajib untuk semua jenis. Question_set memerlukan kind (practice dengan lesson_id saja, atau final_exam dengan module_id saja) dan skill (reading/writing); questions disimpan sebagai draft dan boleh belum lengkap. Validasi soal lengkap dilakukan saat publish.",
+                "description": "Memerlukan role Admin. Membuat course, module, atau lesson yang belum terbit. Course memerlukan level_id; module memerlukan course_id; lesson memerlukan module_id. Title dan slug wajib.",
                 "consumes": [
                     "application/json"
                 ],
@@ -150,30 +135,17 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Admin Content"
+                    "Course Admin"
                 ],
                 "summary": "Buat konten admin",
                 "parameters": [
-                    {
-                        "enum": [
-                            "course",
-                            "module",
-                            "lesson",
-                            "question_set"
-                        ],
-                        "type": "string",
-                        "description": "Jenis resource",
-                        "name": "kind",
-                        "in": "path",
-                        "required": true
-                    },
                     {
                         "description": "Payload lengkap sesuai jenis resource",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.ContentRequest"
+                            "$ref": "#/definitions/internal_course.ContentRequest"
                         }
                     }
                 ],
@@ -181,7 +153,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.CreateResponse"
+                            "$ref": "#/definitions/internal_course.CreateResponse"
                         }
                     },
                     "400": {
@@ -217,121 +189,22 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/content/{kind}/reorder": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Memerlukan role Admin. ordered_ids wajib memuat seluruh anak parent, termasuk draft dan arsip. Module diurutkan dalam course; lesson dalam module. Urutan langsung berlaku tanpa publish. Hanya order_index pada draft dengan parent yang sama yang disinkronkan; perubahan materi lainnya dipertahankan. Seluruh perubahan disimpan dalam satu transaksi.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin Content"
-                ],
-                "summary": "Simpan urutan module atau lesson",
-                "parameters": [
-                    {
-                        "enum": [
-                            "module",
-                            "lesson"
-                        ],
-                        "type": "string",
-                        "description": "Jenis konten",
-                        "name": "kind",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Parent dan seluruh ID sesuai urutan baru",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_admin.ReorderRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_admin.StatusResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/content/{kind}/{id}": {
+        "/admin/courses/{id}": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Memerlukan role Admin. Data berisi resource tersimpan dan draft berisi perubahan yang belum diterbitkan, atau null. Content lesson disanitasi. Question set menyertakan seluruh soal dan pilihan beserta jawaban benar.",
+                "description": "Memerlukan role Admin. Data berisi resource tersimpan; draft berisi perubahan yang belum diterbitkan, atau null.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Admin Content"
+                    "Course Admin"
                 ],
                 "summary": "Detail konten dan draft admin",
                 "parameters": [
-                    {
-                        "enum": [
-                            "course",
-                            "module",
-                            "lesson",
-                            "question_set"
-                        ],
-                        "type": "string",
-                        "description": "Jenis resource",
-                        "name": "kind",
-                        "in": "path",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "format": "uuid",
@@ -345,7 +218,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.ContentDetailResponse"
+                            "$ref": "#/definitions/internal_course.ContentDetailResponse"
                         }
                     },
                     "400": {
@@ -396,19 +269,6 @@ const docTemplate = `{
                 "summary": "Hapus atau arsipkan konten admin",
                 "parameters": [
                     {
-                        "enum": [
-                            "course",
-                            "module",
-                            "lesson",
-                            "question_set"
-                        ],
-                        "type": "string",
-                        "description": "Jenis resource",
-                        "name": "kind",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
                         "type": "string",
                         "format": "uuid",
                         "description": "UUID resource",
@@ -421,7 +281,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.RemoveResponse"
+                            "$ref": "#/definitions/internal_course.RemoveResponse"
                         }
                     },
                     "400": {
@@ -462,7 +322,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Memerlukan role Admin. Kirim payload lengkap sesuai kind seperti pada create; PATCH tidak menggabungkan field dengan data lama. Course/module/lesson yang sudah terbit disimpan sebagai draft; yang belum terbit diperbarui langsung. Question_set selalu menyimpan payload sebagai draft. Respons draft menunjukkan apakah resource sudah terbit. Kind, skill, dan penempatan question_set terbit tidak dapat diubah; versi belum terbit yang memiliki attempt tidak dapat diedit (409).",
+                "description": "Memerlukan role Admin. PATCH menerima payload lengkap. Resource terbit menyimpan perubahan sebagai draft; resource belum terbit diperbarui langsung.",
                 "consumes": [
                     "application/json"
                 ],
@@ -470,23 +330,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Admin Content"
+                    "Course Admin"
                 ],
                 "summary": "Perbarui konten admin",
                 "parameters": [
-                    {
-                        "enum": [
-                            "course",
-                            "module",
-                            "lesson",
-                            "question_set"
-                        ],
-                        "type": "string",
-                        "description": "Jenis resource",
-                        "name": "kind",
-                        "in": "path",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "format": "uuid",
@@ -501,7 +348,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.ContentRequest"
+                            "$ref": "#/definitions/internal_course.ContentRequest"
                         }
                     }
                 ],
@@ -509,7 +356,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.UpdateResponse"
+                            "$ref": "#/definitions/internal_course.UpdateResponse"
                         }
                     },
                     "400": {
@@ -551,35 +398,22 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/content/{kind}/{id}/publish": {
+        "/admin/courses/{id}/publish": {
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Memerlukan role Admin. Menerapkan draft lalu menerbitkan resource; arsip harus dipulihkan terlebih dahulu. Question_set wajib memiliki soal valid: reading memakai multiple_choice dengan minimal dua pilihan dan tepat satu jawaban benar; writing memakai stroke_writing dengan stroke_template_id dan tanpa pilihan. Setiap soal memerlukan prompt, poin positif, dan stimulus atau template. Menerbitkan perubahan question_set yang sudah terbit membuat versi baru dalam lineage yang sama; respons id adalah UUID versi aktif dan dapat berbeda dari id permintaan. Konflik versi atau konfigurasi unik menghasilkan 409.",
+                "description": "Memerlukan role Admin. Menerapkan draft dan menerbitkan course, module, atau lesson secara atomik. Arsip harus dipulihkan terlebih dahulu.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Admin Content"
+                    "Course Admin"
                 ],
                 "summary": "Terbitkan konten admin",
                 "parameters": [
-                    {
-                        "enum": [
-                            "course",
-                            "module",
-                            "lesson",
-                            "question_set"
-                        ],
-                        "type": "string",
-                        "description": "Jenis resource",
-                        "name": "kind",
-                        "in": "path",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "format": "uuid",
@@ -593,7 +427,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.PublishResponse"
+                            "$ref": "#/definitions/internal_course.PublishResponse"
                         }
                     },
                     "400": {
@@ -635,7 +469,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/content/{kind}/{id}/restore": {
+        "/admin/courses/{id}/restore": {
             "post": {
                 "security": [
                     {
@@ -652,19 +486,6 @@ const docTemplate = `{
                 "summary": "Pulihkan konten yang diarsipkan",
                 "parameters": [
                     {
-                        "enum": [
-                            "course",
-                            "module",
-                            "lesson",
-                            "question_set"
-                        ],
-                        "type": "string",
-                        "description": "Jenis resource",
-                        "name": "kind",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
                         "type": "string",
                         "format": "uuid",
                         "description": "UUID resource",
@@ -677,7 +498,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.StatusResponse"
+                            "$ref": "#/definitions/internal_course.StatusResponse"
                         }
                     },
                     "400": {
@@ -1170,7 +991,123 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/lesson-content/preview": {
+        "/admin/lessons": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Mengambil seluruh resource domain ini termasuk draft dan arsip, berdasarkan order_index, created_at, dan id.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Daftar konten admin",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ContentListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Membuat course, module, atau lesson yang belum terbit. Course memerlukan level_id; module memerlukan course_id; lesson memerlukan module_id. Title dan slug wajib.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Buat konten admin",
+                "parameters": [
+                    {
+                        "description": "Payload lengkap sesuai jenis resource",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ContentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.CreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/lessons/preview": {
             "post": {
                 "security": [
                     {
@@ -1195,7 +1132,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.PreviewRequest"
+                            "$ref": "#/definitions/internal_course.PreviewRequest"
                         }
                     }
                 ],
@@ -1203,7 +1140,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.PreviewResponse"
+                            "$ref": "#/definitions/internal_course.PreviewResponse"
                         }
                     },
                     "400": {
@@ -1220,6 +1157,426 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/lessons/reorder": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. ordered_ids wajib memuat seluruh anak parent, termasuk draft dan arsip. Module diurutkan dalam course; lesson dalam module. Urutan langsung berlaku tanpa publish. Hanya order_index pada draft dengan parent yang sama yang disinkronkan; perubahan materi lainnya dipertahankan. Seluruh perubahan disimpan dalam satu transaksi.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Simpan urutan module atau lesson",
+                "parameters": [
+                    {
+                        "description": "Parent dan seluruh ID sesuai urutan baru",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ReorderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/lessons/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Data berisi resource tersimpan; draft berisi perubahan yang belum diterbitkan, atau null.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Detail konten dan draft admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ContentDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Menghapus resource jika tidak memiliki riwayat atau relasi yang menghalangi penghapusan; jika ada, mengarsipkan dan menonaktifkan publikasi. Draft dihapus. Respons archived menunjukkan apakah resource diarsipkan.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Hapus atau arsipkan konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.RemoveResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. PATCH menerima payload lengkap. Resource terbit menyimpan perubahan sebagai draft; resource belum terbit diperbarui langsung.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Perbarui konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Payload lengkap sesuai jenis resource",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ContentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.UpdateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/lessons/{id}/publish": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Menerapkan draft dan menerbitkan course, module, atau lesson secara atomik. Arsip harus dipulihkan terlebih dahulu.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Terbitkan konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.PublishResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/lessons/{id}/restore": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Menghapus status arsip dan menjadikan resource belum diterbitkan. Resource yang tidak ditemukan atau tidak diarsipkan menghasilkan 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Pulihkan konten yang diarsipkan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
                         }
@@ -1246,7 +1603,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.LevelsResponse"
+                            "$ref": "#/definitions/internal_course.LevelsResponse"
                         }
                     },
                     "401": {
@@ -1289,7 +1646,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.MeResponse"
+                            "$ref": "#/definitions/internal_auth.MeResponse"
                         }
                     },
                     "401": {
@@ -1300,6 +1657,1003 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/modules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Mengambil seluruh resource domain ini termasuk draft dan arsip, berdasarkan order_index, created_at, dan id.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Daftar konten admin",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ContentListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Membuat course, module, atau lesson yang belum terbit. Course memerlukan level_id; module memerlukan course_id; lesson memerlukan module_id. Title dan slug wajib.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Buat konten admin",
+                "parameters": [
+                    {
+                        "description": "Payload lengkap sesuai jenis resource",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ContentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.CreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/modules/reorder": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. ordered_ids wajib memuat seluruh anak parent, termasuk draft dan arsip. Module diurutkan dalam course; lesson dalam module. Urutan langsung berlaku tanpa publish. Hanya order_index pada draft dengan parent yang sama yang disinkronkan; perubahan materi lainnya dipertahankan. Seluruh perubahan disimpan dalam satu transaksi.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Simpan urutan module atau lesson",
+                "parameters": [
+                    {
+                        "description": "Parent dan seluruh ID sesuai urutan baru",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ReorderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/modules/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Data berisi resource tersimpan; draft berisi perubahan yang belum diterbitkan, atau null.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Detail konten dan draft admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ContentDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Menghapus resource jika tidak memiliki riwayat atau relasi yang menghalangi penghapusan; jika ada, mengarsipkan dan menonaktifkan publikasi. Draft dihapus. Respons archived menunjukkan apakah resource diarsipkan.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Hapus atau arsipkan konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.RemoveResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. PATCH menerima payload lengkap. Resource terbit menyimpan perubahan sebagai draft; resource belum terbit diperbarui langsung.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Perbarui konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Payload lengkap sesuai jenis resource",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.ContentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.UpdateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/modules/{id}/publish": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Menerapkan draft dan menerbitkan course, module, atau lesson secara atomik. Arsip harus dipulihkan terlebih dahulu.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Course Admin"
+                ],
+                "summary": "Terbitkan konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.PublishResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/modules/{id}/restore": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Menghapus status arsip dan menjadikan resource belum diterbitkan. Resource yang tidak ditemukan atau tidak diarsipkan menghasilkan 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Pulihkan konten yang diarsipkan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/question-sets": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Mengambil seluruh resource domain ini termasuk draft dan arsip, berdasarkan order_index, created_at, dan id.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Question Admin"
+                ],
+                "summary": "Daftar konten admin",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.ContentListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Membuat question set practice dengan lesson_id atau final_exam dengan module_id. Skill reading/writing wajib; questions disimpan sebagai draft dan divalidasi lengkap saat publish.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Question Admin"
+                ],
+                "summary": "Buat konten admin",
+                "parameters": [
+                    {
+                        "description": "Payload lengkap sesuai jenis resource",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.SetInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.CreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/question-sets/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Data berisi resource tersimpan; draft berisi perubahan yang belum diterbitkan, atau null.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Question Admin"
+                ],
+                "summary": "Detail konten dan draft admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.ContentDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Menghapus resource jika tidak memiliki riwayat atau relasi yang menghalangi penghapusan; jika ada, mengarsipkan dan menonaktifkan publikasi. Draft dihapus. Respons archived menunjukkan apakah resource diarsipkan.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Hapus atau arsipkan konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.RemoveResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. PATCH menerima payload lengkap dan menyimpan perubahan sebagai draft. Kind, skill, dan penempatan versi terbit tidak dapat diubah; versi lama dengan attempt tidak dapat diedit.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Question Admin"
+                ],
+                "summary": "Perbarui konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Payload lengkap sesuai jenis resource",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.SetInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.UpdateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/question-sets/{id}/publish": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Memvalidasi seluruh soal dan menerbitkan draft secara atomik. Perubahan versi terbit membuat versi baru dalam lineage yang sama; respons id dapat berbeda dari id permintaan. Riwayat attempt tetap dipertahankan.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Question Admin"
+                ],
+                "summary": "Terbitkan konten admin",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.PublishResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/question-sets/{id}/restore": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Menghapus status arsip dan menjadikan resource belum diterbitkan. Resource yang tidak ditemukan atau tidak diarsipkan menghasilkan 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Content"
+                ],
+                "summary": "Pulihkan konten yang diarsipkan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID resource",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_question.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
                         }
@@ -1326,7 +2680,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.TemplatesResponse"
+                            "$ref": "#/definitions/internal_question.TemplatesResponse"
                         }
                     },
                     "401": {
@@ -1373,7 +2727,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.StrokeTemplateInput"
+                            "$ref": "#/definitions/internal_question.StrokeTemplateInput"
                         }
                     }
                 ],
@@ -1381,7 +2735,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.StrokeTemplateResponse"
+                            "$ref": "#/definitions/internal_question.StrokeTemplateResponse"
                         }
                     },
                     "400": {
@@ -1448,7 +2802,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.StrokeTemplateInput"
+                            "$ref": "#/definitions/internal_question.StrokeTemplateInput"
                         }
                     }
                 ],
@@ -1456,7 +2810,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.StrokeTemplatePreviewResponse"
+                            "$ref": "#/definitions/internal_question.StrokeTemplatePreviewResponse"
                         }
                     },
                     "400": {
@@ -1515,7 +2869,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.StrokeTemplateResponse"
+                            "$ref": "#/definitions/internal_question.StrokeTemplateResponse"
                         }
                     },
                     "400": {
@@ -1582,7 +2936,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.StrokeTemplateInput"
+                            "$ref": "#/definitions/internal_question.StrokeTemplateInput"
                         }
                     }
                 ],
@@ -1590,7 +2944,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_admin.StrokeTemplateResponse"
+                            "$ref": "#/definitions/internal_question.StrokeTemplateResponse"
                         }
                     },
                     "400": {
@@ -2884,597 +4238,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "internal_admin.CatalogData": {
-            "type": "object",
-            "properties": {
-                "courses": {
-                    "type": "array",
-                    "items": {
-                        "type": "object"
-                    }
-                },
-                "lessons": {
-                    "description": "Lesson hanya memuat id, module_id, title, slug, order_index, is_published, dan archived_at.",
-                    "type": "array",
-                    "items": {
-                        "type": "object"
-                    }
-                },
-                "modules": {
-                    "type": "array",
-                    "items": {
-                        "type": "object"
-                    }
-                },
-                "question_sets": {
-                    "type": "array",
-                    "items": {
-                        "type": "object"
-                    }
-                }
-            }
-        },
-        "internal_admin.CatalogResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/internal_admin.CatalogData"
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.ContentDetailResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "description": "Kolom resource sesuai kind; question_set menyertakan questions, options, dan is_correct.",
-                    "type": "object"
-                },
-                "draft": {
-                    "description": "Payload perubahan yang belum diterbitkan, atau null jika tidak ada draft.",
-                    "type": "object"
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.ContentListResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "description": "Kolom resource sesuai kind, tanpa content lesson; course menyertakan module_count dan lesson_count.",
-                    "type": "array",
-                    "items": {
-                        "type": "object"
-                    }
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.ContentRequest": {
-            "type": "object",
-            "required": [
-                "title"
-            ],
-            "properties": {
-                "content": {
-                    "description": "Untuk lesson; HTML disanitasi. Jika kosong, content dan tips menjadi string kosong.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_admin.LessonContent"
-                        }
-                    ]
-                },
-                "cooldown_minutes": {
-                    "type": "integer",
-                    "minimum": 0
-                },
-                "course_id": {
-                    "description": "Wajib untuk module.",
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "description": {
-                    "description": "Untuk course dan module.",
-                    "type": "string"
-                },
-                "estimated_minutes": {
-                    "type": "integer",
-                    "minimum": 0
-                },
-                "is_entry": {
-                    "description": "Untuk module dan lesson.",
-                    "type": "boolean"
-                },
-                "is_mandatory": {
-                    "description": "Untuk module.",
-                    "type": "boolean"
-                },
-                "kind": {
-                    "description": "Field berikut hanya untuk question_set. Kind dan skill wajib diisi.",
-                    "type": "string",
-                    "enum": [
-                        "practice",
-                        "final_exam"
-                    ]
-                },
-                "lesson_id": {
-                    "description": "Wajib untuk question_set practice; kosong untuk final_exam.",
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "lesson_prerequisites": {
-                    "description": "Daftar UUID lesson prasyarat. [] menghapus semua prasyarat; null/tidak dikirim mempertahankan relasi.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "level_id": {
-                    "description": "Wajib untuk course.",
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "max_attempts": {
-                    "description": "Null berarti tanpa batas attempt.",
-                    "type": "integer",
-                    "minimum": 1
-                },
-                "module_id": {
-                    "description": "Wajib untuk lesson atau question_set final_exam; kosong untuk practice.",
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "module_prerequisites": {
-                    "description": "Daftar UUID module prasyarat. [] menghapus semua prasyarat; null/tidak dikirim mempertahankan relasi.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "order_index": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "example": 0
-                },
-                "passing_score": {
-                    "type": "integer",
-                    "maximum": 100,
-                    "minimum": 0,
-                    "example": 70
-                },
-                "questions": {
-                    "description": "Boleh kosong saat menyimpan draft. Saat publish wajib ada soal valid.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_admin.questionInput"
-                    }
-                },
-                "shuffle_questions": {
-                    "type": "boolean"
-                },
-                "skill": {
-                    "type": "string",
-                    "enum": [
-                        "reading",
-                        "writing"
-                    ]
-                },
-                "slug": {
-                    "description": "Wajib untuk course, module, dan lesson; huruf kecil, angka, dan tanda hubung.",
-                    "type": "string",
-                    "maxLength": 120,
-                    "example": "hiragana-dasar"
-                },
-                "thumbnail_url": {
-                    "description": "Untuk course; URL HTTP/HTTPS.",
-                    "type": "string",
-                    "example": "https://example.com/thumbnail.png"
-                },
-                "time_limit_seconds": {
-                    "description": "Null atau 0 berarti tanpa batas waktu.",
-                    "type": "integer",
-                    "minimum": 0
-                },
-                "title": {
-                    "type": "string",
-                    "maxLength": 160,
-                    "example": "Hiragana dasar"
-                },
-                "total_questions": {
-                    "description": "Null berarti semua soal; saat publish tidak boleh melebihi jumlah soal tersedia.",
-                    "type": "integer",
-                    "minimum": 1
-                }
-            }
-        },
-        "internal_admin.CreateResponse": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.LessonContent": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string",
-                    "example": "\u003cp\u003eBelajar huruf hiragana.\u003c/p\u003e"
-                },
-                "tips": {
-                    "type": "string",
-                    "example": "Latih setiap hari."
-                }
-            }
-        },
-        "internal_admin.Level": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "example": "N5"
-                },
-                "created_at": {
-                    "type": "string",
-                    "format": "date-time"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "order_index": {
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string",
-                    "format": "date-time"
-                }
-            }
-        },
-        "internal_admin.LevelsResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_admin.Level"
-                    }
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.MeResponse": {
-            "type": "object",
-            "properties": {
-                "role": {
-                    "type": "string",
-                    "enum": [
-                        "Admin"
-                    ],
-                    "example": "Admin"
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.PreviewRequest": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "object"
-                }
-            }
-        },
-        "internal_admin.PreviewResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "object"
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.PublishResponse": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "description": "Hanya untuk question_set; dapat berubah saat versi baru diterbitkan.",
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.RemoveResponse": {
-            "type": "object",
-            "properties": {
-                "archived": {
-                    "description": "True jika diarsipkan karena memiliki riwayat atau relasi; false jika dihapus permanen.",
-                    "type": "boolean"
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.ReorderRequest": {
-            "type": "object",
-            "properties": {
-                "ordered_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "parent_id": {
-                    "type": "string",
-                    "format": "uuid"
-                }
-            }
-        },
-        "internal_admin.StatusResponse": {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.StrokeTemplate": {
-            "type": "object",
-            "properties": {
-                "character": {
-                    "type": "string",
-                    "example": "あ"
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "romaji": {
-                    "type": "string",
-                    "example": "a"
-                },
-                "script": {
-                    "type": "string",
-                    "enum": [
-                        "hiragana",
-                        "katakana"
-                    ]
-                },
-                "source_version": {
-                    "type": "string"
-                },
-                "stroke_count": {
-                    "type": "integer"
-                }
-            }
-        },
-        "internal_admin.StrokeTemplateDetail": {
-            "type": "object",
-            "properties": {
-                "character": {
-                    "type": "string",
-                    "example": "あ"
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "romaji": {
-                    "type": "string",
-                    "example": "a"
-                },
-                "script": {
-                    "type": "string",
-                    "enum": [
-                        "hiragana",
-                        "katakana"
-                    ]
-                },
-                "source_version": {
-                    "type": "string"
-                },
-                "stroke_count": {
-                    "type": "integer"
-                },
-                "stroke_data": {
-                    "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Data"
-                }
-            }
-        },
-        "internal_admin.StrokeTemplateInput": {
-            "type": "object",
-            "properties": {
-                "character": {
-                    "type": "string",
-                    "example": "あ"
-                },
-                "romaji": {
-                    "type": "string",
-                    "example": "a"
-                },
-                "script": {
-                    "type": "string",
-                    "enum": [
-                        "hiragana",
-                        "katakana"
-                    ]
-                },
-                "source_version": {
-                    "type": "string",
-                    "example": "r20260714"
-                },
-                "svg_content": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_admin.StrokeTemplatePreview": {
-            "type": "object",
-            "properties": {
-                "character": {
-                    "type": "string"
-                },
-                "romaji": {
-                    "type": "string"
-                },
-                "script": {
-                    "type": "string"
-                },
-                "source_version": {
-                    "type": "string"
-                },
-                "stroke_count": {
-                    "type": "integer"
-                },
-                "stroke_data": {
-                    "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Data"
-                }
-            }
-        },
-        "internal_admin.StrokeTemplatePreviewResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/internal_admin.StrokeTemplatePreview"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "internal_admin.StrokeTemplateResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/internal_admin.StrokeTemplateDetail"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "internal_admin.TemplatesResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_admin.StrokeTemplate"
-                    }
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.UpdateResponse": {
-            "type": "object",
-            "properties": {
-                "draft": {
-                    "description": "True jika konten sudah diterbitkan. Perubahan question_set selalu disimpan sebagai draft.",
-                    "type": "boolean"
-                },
-                "success": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "internal_admin.optionInput": {
-            "type": "object",
-            "properties": {
-                "is_correct": {
-                    "type": "boolean"
-                },
-                "label": {
-                    "type": "string",
-                    "example": "a"
-                },
-                "media_url": {
-                    "type": "string",
-                    "example": "https://example.com/option.png"
-                }
-            }
-        },
-        "internal_admin.questionInput": {
-            "type": "object",
-            "properties": {
-                "explanation": {
-                    "type": "string"
-                },
-                "options": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_admin.optionInput"
-                    }
-                },
-                "points": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "prompt_text": {
-                    "type": "string",
-                    "example": "Pilih romaji yang tepat."
-                },
-                "question_type": {
-                    "type": "string",
-                    "enum": [
-                        "multiple_choice",
-                        "stroke_writing"
-                    ]
-                },
-                "show_writing_guide": {
-                    "type": "boolean"
-                },
-                "stimulus_media_url": {
-                    "type": "string"
-                },
-                "stimulus_text": {
-                    "type": "string"
-                },
-                "stroke_template_id": {
-                    "type": "string",
-                    "format": "uuid"
-                }
-            }
-        },
         "internal_auth.AuthSession": {
             "type": "object",
             "properties": {
@@ -3503,6 +4266,22 @@ const docTemplate = `{
             "properties": {
                 "session_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_auth.MeResponse": {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "Admin"
+                    ],
+                    "example": "Admin"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -3597,6 +4376,313 @@ const docTemplate = `{
                 },
                 "token": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_course.CatalogData": {
+            "type": "object",
+            "properties": {
+                "courses": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "lessons": {
+                    "description": "Lesson hanya memuat id, module_id, title, slug, order_index, is_published, dan archived_at.",
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "modules": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "question_sets": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                }
+            }
+        },
+        "internal_course.CatalogResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_course.CatalogData"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.ContentDetailResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Kolom course, module, atau lesson sesuai resource; content lesson disanitasi.",
+                    "type": "object"
+                },
+                "draft": {
+                    "description": "Payload perubahan yang belum diterbitkan, atau null jika tidak ada draft.",
+                    "type": "object"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.ContentListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Kolom resource sesuai kind, tanpa content lesson; course menyertakan module_count dan lesson_count.",
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.ContentRequest": {
+            "type": "object",
+            "required": [
+                "title"
+            ],
+            "properties": {
+                "content": {
+                    "description": "Untuk lesson; HTML disanitasi. Jika kosong, content dan tips menjadi string kosong.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_course.LessonContent"
+                        }
+                    ]
+                },
+                "course_id": {
+                    "description": "Wajib untuk module.",
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "description": {
+                    "description": "Untuk course dan module.",
+                    "type": "string"
+                },
+                "estimated_minutes": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "is_entry": {
+                    "description": "Untuk module dan lesson.",
+                    "type": "boolean"
+                },
+                "is_mandatory": {
+                    "description": "Untuk module.",
+                    "type": "boolean"
+                },
+                "lesson_prerequisites": {
+                    "description": "Daftar UUID lesson prasyarat. [] menghapus semua prasyarat; null/tidak dikirim mempertahankan relasi.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "level_id": {
+                    "description": "Wajib untuk course.",
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "module_id": {
+                    "description": "Wajib untuk lesson.",
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "module_prerequisites": {
+                    "description": "Daftar UUID module prasyarat. [] menghapus semua prasyarat; null/tidak dikirim mempertahankan relasi.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "order_index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 0
+                },
+                "slug": {
+                    "description": "Wajib untuk course, module, dan lesson; huruf kecil, angka, dan tanda hubung.",
+                    "type": "string",
+                    "maxLength": 120,
+                    "example": "hiragana-dasar"
+                },
+                "thumbnail_url": {
+                    "description": "Untuk course; URL HTTP/HTTPS.",
+                    "type": "string",
+                    "example": "https://example.com/thumbnail.png"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 160,
+                    "example": "Hiragana dasar"
+                }
+            }
+        },
+        "internal_course.CreateResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.LessonContent": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "example": "\u003cp\u003eBelajar huruf hiragana.\u003c/p\u003e"
+                },
+                "tips": {
+                    "type": "string",
+                    "example": "Latih setiap hari."
+                }
+            }
+        },
+        "internal_course.Level": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "N5"
+                },
+                "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "order_index": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "internal_course.LevelsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_course.Level"
+                    }
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.PreviewRequest": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "object"
+                }
+            }
+        },
+        "internal_course.PreviewResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.PublishResponse": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.RemoveResponse": {
+            "type": "object",
+            "properties": {
+                "archived": {
+                    "description": "True jika diarsipkan karena memiliki riwayat atau relasi; false jika dihapus permanen.",
+                    "type": "boolean"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.ReorderRequest": {
+            "type": "object",
+            "properties": {
+                "ordered_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "parent_id": {
+                    "type": "string",
+                    "format": "uuid"
+                }
+            }
+        },
+        "internal_course.StatusResponse": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_course.UpdateResponse": {
+            "type": "object",
+            "properties": {
+                "draft": {
+                    "description": "True jika perubahan konten terbit disimpan sebagai draft.",
+                    "type": "boolean"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -4019,6 +5105,52 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_question.ContentDetailResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Kolom resource sesuai kind; question_set menyertakan questions, options, dan is_correct.",
+                    "type": "object"
+                },
+                "draft": {
+                    "description": "Payload perubahan yang belum diterbitkan, atau null jika tidak ada draft.",
+                    "type": "object"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_question.ContentListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Kolom resource sesuai kind, tanpa content lesson; course menyertakan module_count dan lesson_count.",
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_question.CreateResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
         "internal_question.GuideStroke": {
             "type": "object",
             "properties": {
@@ -4047,6 +5179,36 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "internal_question.OptionInput": {
+            "type": "object",
+            "properties": {
+                "is_correct": {
+                    "type": "boolean"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "a"
+                },
+                "media_url": {
+                    "type": "string",
+                    "example": "https://example.com/option.png"
+                }
+            }
+        },
+        "internal_question.PublishResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "Hanya untuk question_set; dapat berubah saat versi baru diterbitkan.",
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -4088,6 +5250,48 @@ const docTemplate = `{
                 },
                 "writing_guide": {
                     "$ref": "#/definitions/internal_question.WritingGuide"
+                }
+            }
+        },
+        "internal_question.QuestionInput": {
+            "type": "object",
+            "properties": {
+                "explanation": {
+                    "type": "string"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_question.OptionInput"
+                    }
+                },
+                "points": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "prompt_text": {
+                    "type": "string",
+                    "example": "Pilih romaji yang tepat."
+                },
+                "question_type": {
+                    "type": "string",
+                    "enum": [
+                        "multiple_choice",
+                        "stroke_writing"
+                    ]
+                },
+                "show_writing_guide": {
+                    "type": "boolean"
+                },
+                "stimulus_media_url": {
+                    "type": "string"
+                },
+                "stimulus_text": {
+                    "type": "string"
+                },
+                "stroke_template_id": {
+                    "type": "string",
+                    "format": "uuid"
                 }
             }
         },
@@ -4250,6 +5454,66 @@ const docTemplate = `{
                 "QuestionTypeStrokeWriting"
             ]
         },
+        "internal_question.RemoveResponse": {
+            "type": "object",
+            "properties": {
+                "archived": {
+                    "description": "True jika diarsipkan karena memiliki riwayat atau relasi; false jika dihapus permanen.",
+                    "type": "boolean"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_question.SetInput": {
+            "type": "object",
+            "properties": {
+                "cooldown_minutes": {
+                    "type": "integer"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "lesson_id": {
+                    "type": "string"
+                },
+                "max_attempts": {
+                    "type": "integer"
+                },
+                "module_id": {
+                    "type": "string"
+                },
+                "order_index": {
+                    "type": "integer"
+                },
+                "passing_score": {
+                    "type": "integer"
+                },
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_question.QuestionInput"
+                    }
+                },
+                "shuffle_questions": {
+                    "type": "boolean"
+                },
+                "skill": {
+                    "type": "string"
+                },
+                "time_limit_seconds": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "total_questions": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_question.Skill": {
             "type": "string",
             "enum": [
@@ -4295,6 +5559,150 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_question.StatusResponse": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_question.StrokeTemplate": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string",
+                    "example": "あ"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "romaji": {
+                    "type": "string",
+                    "example": "a"
+                },
+                "script": {
+                    "type": "string",
+                    "enum": [
+                        "hiragana",
+                        "katakana"
+                    ]
+                },
+                "source_version": {
+                    "type": "string"
+                },
+                "stroke_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_question.StrokeTemplateDetail": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string",
+                    "example": "あ"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "romaji": {
+                    "type": "string",
+                    "example": "a"
+                },
+                "script": {
+                    "type": "string",
+                    "enum": [
+                        "hiragana",
+                        "katakana"
+                    ]
+                },
+                "source_version": {
+                    "type": "string"
+                },
+                "stroke_count": {
+                    "type": "integer"
+                },
+                "stroke_data": {
+                    "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Data"
+                }
+            }
+        },
+        "internal_question.StrokeTemplateInput": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string",
+                    "example": "あ"
+                },
+                "romaji": {
+                    "type": "string",
+                    "example": "a"
+                },
+                "script": {
+                    "type": "string",
+                    "enum": [
+                        "hiragana",
+                        "katakana"
+                    ]
+                },
+                "source_version": {
+                    "type": "string",
+                    "example": "r20260714"
+                },
+                "svg_content": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_question.StrokeTemplatePreview": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string"
+                },
+                "romaji": {
+                    "type": "string"
+                },
+                "script": {
+                    "type": "string"
+                },
+                "source_version": {
+                    "type": "string"
+                },
+                "stroke_count": {
+                    "type": "integer"
+                },
+                "stroke_data": {
+                    "$ref": "#/definitions/nihon-no-hikari-api_pkg_kanastroke.Data"
+                }
+            }
+        },
+        "internal_question.StrokeTemplatePreviewResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_question.StrokeTemplatePreview"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_question.StrokeTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_question.StrokeTemplateDetail"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "internal_question.SubmitAnswerRequest": {
             "type": "object",
             "properties": {
@@ -4334,6 +5742,34 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "internal_question.TemplatesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_question.StrokeTemplate"
+                    }
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_question.UpdateResponse": {
+            "type": "object",
+            "properties": {
+                "draft": {
+                    "description": "True jika konten sudah diterbitkan. Perubahan question_set selalu disimpan sebagai draft.",
+                    "type": "boolean"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },

@@ -1,6 +1,6 @@
 # Reorder integration tests
 
-Run `go test ./...` for ordinary tests. Set `ADMIN_REORDER_TEST_DATABASE_URL` to a disposable PostgreSQL instance and run `go test ./internal/admin -run Reorder -v` to include database verification.
+Run `go test ./...` for ordinary tests. Set `ADMIN_REORDER_TEST_DATABASE_URL` to a disposable PostgreSQL instance and run `go test ./internal/course -run Reorder -v` to include database verification. Reorder is owned by course and uses `/api/v1/admin/modules/reorder` and `/api/v1/admin/lessons/reorder`.
 
 The database test creates a uniquely named database, installs a minimal schema with the application's deferred module order constraint, and drops that database afterward. It never writes application tables in the supplied connection's database. The connection needs permission to create and drop databases.
 

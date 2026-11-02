@@ -159,7 +159,7 @@ After uploading the cover and optional MP3s, POST a complete topic:
         "japanese": "学校へ行きます。",
         "indonesian": "Saya pergi ke sekolah."
       },
-      "type": "Kata Benda",
+      "type": "noun",
       "audio_media_id": null
     }
   ]
@@ -183,8 +183,27 @@ and reconcile changes before trying again.
 
 Required values follow the editor: title up to 160 Unicode characters,
 description up to 200, positive topic order, cover, at least one word, and all
-word/example text fields. Category is `Dasar|Populer|Pemula`; word type is
-`Kata Benda|Kata Kerja|Kata Sifat|Lainnya`. Topic order can tie. Audio is optional.
+word/example text fields. Category is `Dasar|Populer|Pemula`. Topic order can
+tie. Audio is optional.
+
+Word `type` is stored as the `kotoba_vocabulary_type` enum and uses English keys
+in requests and responses. It is optional: a missing or blank value is saved as
+`other`. Clients render the Indonesian label:
+
+| `type` | Label |
+|---|---|
+| `verb` | Kata Kerja |
+| `adjective` | Kata Sifat |
+| `adverb` | Kata Keterangan |
+| `question_word` | Kata Tanya |
+| `noun` | Kata Benda |
+| `family_member` | Anggota Keluarga |
+| `counter` | Cara Menghitung |
+| `day_date_month` | Hari, Tanggal & Bulan |
+| `other` (default) | Lainnya |
+
+Legacy labels such as `Kata Benda` are rejected with a `vocabulary.N.type` field error.
+
 Furigana segments must concatenate exactly to the Japanese word. An empty array
 generates one whole-word segment; kana-only words omit redundant readings.
 

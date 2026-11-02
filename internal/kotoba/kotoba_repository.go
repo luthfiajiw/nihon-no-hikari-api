@@ -181,8 +181,8 @@ func (r *dbRepository) Save(ctx context.Context, id uuid.UUID, in TopicInput, cr
 			return err
 		}
 		_, err = r.q.Exec(ctx, `INSERT INTO kotoba_vocabularies(id,topic_id,kanji,hiragana,furigana,romaji,translation,
-            example_japanese,example_indonesian,type,order_index,audio_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-			wordID, id, w.Kanji, w.Hiragana, string(furigana), w.Romaji, w.Translation, w.Example.Japanese, w.Example.Indonesian, w.Type, i+1, w.AudioMediaID)
+            example_japanese,example_indonesian,type,order_index,audio_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::kotoba_vocabulary_type,$11,$12)`,
+			wordID, id, w.Kanji, w.Hiragana, string(furigana), w.Romaji, w.Translation, w.Example.Japanese, w.Example.Indonesian, string(w.Type), i+1, w.AudioMediaID)
 		if err != nil {
 			return dbError(err)
 		}

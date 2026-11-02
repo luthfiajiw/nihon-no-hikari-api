@@ -58,8 +58,50 @@ func TestKotobaMigrationDatabase(t *testing.T) {
 	}
 }
 
-func TestKotobaDatabase(t *testing.T) {
+func TestKotobaVocabularyTypeMigrationDatabase(t *testing.T) {
 	pool := testdb.New(t, 14)
+	user, cover, topic := uuid.New(), uuid.New(), uuid.New()
+	execSQL(t, pool, `INSERT INTO users(id,email,display_name,role) VALUES($1,'kotoba-type@example.test','Kotoba Admin','Admin')`, user)
+	execSQL(t, pool, `INSERT INTO kotoba_media(id,kind,bucket,object_path,mime_type,size_bytes,uploaded_by,status)
+		VALUES($1,'cover','covers','type.png','image/png',1,$2,'ready')`, cover, user)
+	execSQL(t, pool, `INSERT INTO kotoba_topics(id,level_id,title,category,description,order_index,cover_media_id)
+		VALUES($1,(SELECT id FROM levels WHERE code='N5'),'Tipe','Dasar','Tipe kata',1,$2)`, topic, cover)
+	insertWord := func(order int, typ string) {
+		t.Helper()
+		execSQL(t, pool, `INSERT INTO kotoba_vocabularies(id,topic_id,kanji,hiragana,furigana,romaji,translation,example_japanese,example_indonesian,type,order_index)
+			VALUES($1,$2,'語','ご','[]','go','kata','語。','Kata.',$3,$4)`, uuid.New(), topic, typ, order)
+	}
+	for i, legacy := range []string{"Kata Benda", "Kata Kerja", "Kata Sifat", "Lainnya"} {
+		insertWord(i+1, legacy)
+	}
+	testdb.Migrate(t, pool, 15, "up")
+	if n := countSQL(t, pool, `SELECT count(*) FROM kotoba_vocabularies WHERE topic_id=$1 AND
+		((order_index=1 AND type='noun') OR (order_index=2 AND type='verb') OR (order_index=3 AND type='adjective') OR (order_index=4 AND type='other'))`, topic); n != 4 {
+		t.Fatalf("legacy labels converted incorrectly: %d", n)
+	}
+	if n := countSQL(t, pool, `SELECT count(*) FROM information_schema.columns WHERE table_name='kotoba_vocabularies'
+		AND column_name='type' AND udt_name='kotoba_vocabulary_type' AND column_default LIKE '''other''%'`); n != 1 {
+		t.Fatal("type column is not the enum with default 'other'")
+	}
+	execSQL(t, pool, `INSERT INTO kotoba_vocabularies(id,topic_id,kanji,hiragana,furigana,romaji,translation,example_japanese,example_indonesian,order_index)
+		VALUES($1,$2,'語','ご','[]','go','kata','語。','Kata.',5)`, uuid.New(), topic)
+	if n := countSQL(t, pool, `SELECT count(*) FROM kotoba_vocabularies WHERE order_index=5 AND type='other'`); n != 1 {
+		t.Fatal("missing type did not default to other")
+	}
+	if _, err := pool.Exec(context.Background(), `UPDATE kotoba_vocabularies SET type='Kata Benda' WHERE order_index=5`); err == nil {
+		t.Fatal("legacy label accepted by enum")
+	}
+	execSQL(t, pool, `UPDATE kotoba_vocabularies SET type='counter' WHERE order_index=5`)
+	testdb.Migrate(t, pool, 15, "down")
+	if n := countSQL(t, pool, `SELECT count(*) FROM kotoba_vocabularies WHERE
+		(order_index=1 AND type='Kata Benda') OR (order_index=2 AND type='Kata Kerja') OR (order_index=3 AND type='Kata Sifat') OR (order_index IN (4,5) AND type='Lainnya')`); n != 5 {
+		t.Fatalf("down migration restored labels incorrectly: %d", n)
+	}
+	testdb.Migrate(t, pool, 15, "up")
+}
+
+func TestKotobaDatabase(t *testing.T) {
+	pool := testdb.New(t, 15)
 	ctx := context.Background()
 	user := uuid.New()
 	execSQL(t, pool, `INSERT INTO users(id,email,display_name,role) VALUES($1,'kotoba@example.test','Kotoba Admin','Admin')`, user)

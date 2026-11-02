@@ -38,14 +38,43 @@ type Example struct {
 	Japanese   string `json:"japanese"`
 	Indonesian string `json:"indonesian"`
 }
+
+// VocabularyType mirrors the public.kotoba_vocabulary_type enum. Clients render
+// the Indonesian label (e.g. "Kata Kerja" for verb).
+type VocabularyType string
+
+const (
+	TypeVerb         VocabularyType = "verb"
+	TypeAdjective    VocabularyType = "adjective"
+	TypeAdverb       VocabularyType = "adverb"
+	TypeQuestionWord VocabularyType = "question_word"
+	TypeNoun         VocabularyType = "noun"
+	TypeFamilyMember VocabularyType = "family_member"
+	TypeCounter      VocabularyType = "counter"
+	TypeDayDateMonth VocabularyType = "day_date_month"
+	TypeOther        VocabularyType = "other"
+)
+
+// VocabularyTypes lists every accepted type in display order.
+var VocabularyTypes = []VocabularyType{TypeVerb, TypeAdjective, TypeAdverb, TypeQuestionWord, TypeNoun, TypeFamilyMember, TypeCounter, TypeDayDateMonth, TypeOther}
+
+func (t VocabularyType) Valid() bool {
+	for _, v := range VocabularyTypes {
+		if t == v {
+			return true
+		}
+	}
+	return false
+}
+
 type WordFields struct {
-	Kanji       string     `json:"kanji"`
-	Hiragana    string     `json:"hiragana"`
-	Furigana    []Furigana `json:"furigana"`
-	Romaji      string     `json:"romaji"`
-	Translation string     `json:"translation"`
-	Example     Example    `json:"example"`
-	Type        string     `json:"type" enums:"Kata Benda,Kata Kerja,Kata Sifat,Lainnya"`
+	Kanji       string         `json:"kanji"`
+	Hiragana    string         `json:"hiragana"`
+	Furigana    []Furigana     `json:"furigana"`
+	Romaji      string         `json:"romaji"`
+	Translation string         `json:"translation"`
+	Example     Example        `json:"example"`
+	Type        VocabularyType `json:"type" enums:"verb,adjective,adverb,question_word,noun,family_member,counter,day_date_month,other" default:"other"`
 }
 type VocabularyInput struct {
 	ID *uuid.UUID `json:"id,omitempty"`
@@ -200,7 +229,11 @@ func (in *TopicInput) Validate(update bool) error {
 				e[prefix+key] = "Kolom ini wajib diisi."
 			}
 		}
-		if w.Type != "Kata Benda" && w.Type != "Kata Kerja" && w.Type != "Kata Sifat" && w.Type != "Lainnya" {
+		w.Type = VocabularyType(strings.TrimSpace(string(w.Type)))
+		if w.Type == "" {
+			w.Type = TypeOther
+		}
+		if !w.Type.Valid() {
 			e[prefix+"type"] = "Jenis kata tidak valid."
 		}
 		if w.AudioMediaID != nil && *w.AudioMediaID == uuid.Nil {

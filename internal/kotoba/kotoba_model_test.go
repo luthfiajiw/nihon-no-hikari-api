@@ -10,7 +10,7 @@ import (
 
 func validInput() TopicInput {
 	return TopicInput{Title: "Sekolah", Level: "N5", Category: "Dasar", Description: "Kosakata sekolah", OrderIndex: 1, IsActive: true, IsVisible: true, CoverMediaID: uuid.New(), Vocabulary: []VocabularyInput{
-		{WordFields: WordFields{Kanji: "学校", Hiragana: "がっこう", Romaji: "gakkou", Translation: "sekolah", Type: "Kata Benda", Example: Example{Japanese: "学校へ行きます。", Indonesian: "Saya pergi ke sekolah."}}},
+		{WordFields: WordFields{Kanji: "学校", Hiragana: "がっこう", Romaji: "gakkou", Translation: "sekolah", Type: TypeNoun, Example: Example{Japanese: "学校へ行きます。", Indonesian: "Saya pergi ke sekolah."}}},
 	}}
 }
 func TestTopicValidation(t *testing.T) {
@@ -29,7 +29,8 @@ func TestTopicValidation(t *testing.T) {
 		{name: "cover", field: "cover_media_id", change: func(v *TopicInput) { v.CoverMediaID = uuid.Nil }},
 		{name: "empty words", field: "vocabulary", change: func(v *TopicInput) { v.Vocabulary = nil }},
 		{name: "word required", field: "vocabulary.0.example.japanese", change: func(v *TopicInput) { v.Vocabulary[0].Example.Japanese = " " }},
-		{name: "type", field: "vocabulary.0.type", change: func(v *TopicInput) { v.Vocabulary[0].Type = "other" }},
+		{name: "type", field: "vocabulary.0.type", change: func(v *TopicInput) { v.Vocabulary[0].Type = "unknown" }},
+		{name: "legacy type label", field: "vocabulary.0.type", change: func(v *TopicInput) { v.Vocabulary[0].Type = "Kata Benda" }},
 		{name: "furigana mismatch", field: "vocabulary.0.furigana", change: func(v *TopicInput) { v.Vocabulary[0].Furigana = []Furigana{{Text: "学"}} }},
 		{name: "empty segment", field: "vocabulary.0.furigana", change: func(v *TopicInput) { v.Vocabulary[0].Furigana = []Furigana{{Text: "学校"}, {Text: ""}} }},
 		{name: "zero audio", field: "vocabulary.0.audio_media_id", change: func(v *TopicInput) { id := uuid.Nil; v.Vocabulary[0].AudioMediaID = &id }},
@@ -64,6 +65,26 @@ func TestTopicValidation(t *testing.T) {
 	in.Vocabulary[0].Furigana = nil
 	if err := in.Validate(false); err != nil || in.Vocabulary[0].Furigana[0].Reading != "" {
 		t.Fatal("kana should not get a redundant ruby reading")
+	}
+}
+func TestVocabularyTypeValidation(t *testing.T) {
+	want := []VocabularyType{"verb", "adjective", "adverb", "question_word", "noun", "family_member", "counter", "day_date_month", "other"}
+	if len(VocabularyTypes) != len(want) {
+		t.Fatalf("unexpected type count: %v", VocabularyTypes)
+	}
+	for _, typ := range want {
+		in := validInput()
+		in.Vocabulary[0].Type = typ
+		if err := in.Validate(false); err != nil {
+			t.Fatalf("%s rejected: %v", typ, err)
+		}
+	}
+	for _, blank := range []VocabularyType{"", "  "} {
+		in := validInput()
+		in.Vocabulary[0].Type = blank
+		if err := in.Validate(false); err != nil || in.Vocabulary[0].Type != TypeOther {
+			t.Fatalf("blank type should default to other: %v %q", err, in.Vocabulary[0].Type)
+		}
 	}
 }
 func TestFilterValidation(t *testing.T) {

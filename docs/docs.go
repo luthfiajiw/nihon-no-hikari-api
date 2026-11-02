@@ -4945,11 +4945,17 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string",
+                    "default": "other",
                     "enum": [
-                        "Kata Benda",
-                        "Kata Kerja",
-                        "Kata Sifat",
-                        "Lainnya"
+                        "verb",
+                        "adjective",
+                        "adverb",
+                        "question_word",
+                        "noun",
+                        "family_member",
+                        "counter",
+                        "day_date_month",
+                        "other"
                     ]
                 }
             }
@@ -4986,11 +4992,17 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string",
+                    "default": "other",
                     "enum": [
-                        "Kata Benda",
-                        "Kata Kerja",
-                        "Kata Sifat",
-                        "Lainnya"
+                        "verb",
+                        "adjective",
+                        "adverb",
+                        "question_word",
+                        "noun",
+                        "family_member",
+                        "counter",
+                        "day_date_month",
+                        "other"
                     ]
                 }
             }

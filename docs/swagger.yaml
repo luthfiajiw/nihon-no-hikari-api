@@ -486,11 +486,17 @@ definitions:
       translation:
         type: string
       type:
+        default: other
         enum:
-        - Kata Benda
-        - Kata Kerja
-        - Kata Sifat
-        - Lainnya
+        - verb
+        - adjective
+        - adverb
+        - question_word
+        - noun
+        - family_member
+        - counter
+        - day_date_month
+        - other
         type: string
     type: object
   internal_kotoba.VocabularyInput:
@@ -514,11 +520,17 @@ definitions:
       translation:
         type: string
       type:
+        default: other
         enum:
-        - Kata Benda
-        - Kata Kerja
-        - Kata Sifat
-        - Lainnya
+        - verb
+        - adjective
+        - adverb
+        - question_word
+        - noun
+        - family_member
+        - counter
+        - day_date_month
+        - other
         type: string
     type: object
   internal_question.AbandonAttemptResponse:

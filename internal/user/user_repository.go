@@ -3,29 +3,36 @@ package user
 import (
 	"context"
 
+	"nihon-no-hikari-api/pkg/db"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
+	UseTx(tx pgx.Tx) Repository
 	FindBy(ctx context.Context, params FindUserParam) (User, error)
-	CreateTx(ctx context.Context, tx pgx.Tx, params UserParams) (User, error)
+	Create(ctx context.Context, params UserParams) (User, error)
 }
 
 type dbRepository struct {
-	db *pgxpool.Pool
+	q db.Querier
 }
 
-// CreateTx implements [Repository].
-func (d *dbRepository) CreateTx(ctx context.Context, tx pgx.Tx, params UserParams) (User, error) {
+func (r *dbRepository) UseTx(tx pgx.Tx) Repository {
+	return &dbRepository{q: tx}
+}
+
+// Create implements [Repository].
+func (r *dbRepository) Create(ctx context.Context, params UserParams) (User, error) {
 	q := `
 		INSERT INTO users (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id, role
 	`
 
 	var userID uuid.UUID
 	var role Role
-	err := tx.QueryRow(
+	err := r.q.QueryRow(
 		ctx,
 		q,
 		params.Email,
@@ -46,8 +53,8 @@ func (d *dbRepository) CreateTx(ctx context.Context, tx pgx.Tx, params UserParam
 	}, nil
 }
 
-// GetById implements [Repository].
-func (d *dbRepository) FindBy(ctx context.Context, params FindUserParam) (User, error) {
+// FindBy implements [Repository].
+func (r *dbRepository) FindBy(ctx context.Context, params FindUserParam) (User, error) {
 	var row pgx.Row
 
 	q := `
@@ -56,11 +63,11 @@ func (d *dbRepository) FindBy(ctx context.Context, params FindUserParam) (User, 
 
 	if params.ID != uuid.Nil {
 		q += "WHERE id = $1"
-		row = d.db.QueryRow(ctx, q, params.ID)
+		row = r.q.QueryRow(ctx, q, params.ID)
 	}
 	if params.Email != "" {
 		q += "WHERE email = $1"
-		row = d.db.QueryRow(ctx, q, params.Email)
+		row = r.q.QueryRow(ctx, q, params.Email)
 	}
 
 	var user User
@@ -73,6 +80,6 @@ func (d *dbRepository) FindBy(ctx context.Context, params FindUserParam) (User, 
 	return user, nil
 }
 
-func NewRepository(db *pgxpool.Pool) Repository {
-	return &dbRepository{db: db}
+func NewRepository(pool *pgxpool.Pool) Repository {
+	return &dbRepository{q: pool}
 }

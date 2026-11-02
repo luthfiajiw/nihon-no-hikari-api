@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"nihon-no-hikari-api/internal/course/model"
+	"nihon-no-hikari-api/pkg/db"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,7 +15,6 @@ import (
 )
 
 type ContentRepository interface {
-	UseTx(pgx.Tx) ContentRepository
 	Catalog(context.Context, *uuid.UUID) (model.CatalogData, error)
 	Levels(context.Context) ([]model.Level, error)
 	ListContent(context.Context, string) ([]json.RawMessage, error)
@@ -32,17 +32,6 @@ type ContentRepository interface {
 	RestoreContent(context.Context, string, uuid.UUID) error
 	LockSiblings(context.Context, string, uuid.UUID) ([]uuid.UUID, error)
 	ApplyOrder(context.Context, string, model.ReorderRequest) error
-}
-
-type dbQuerier interface {
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-	QueryRow(context.Context, string, ...any) pgx.Row
-}
-
-// UseTx only binds queries; begin, commit and rollback belong to pkg/db.
-func (r *dbRepository) UseTx(tx pgx.Tx) ContentRepository {
-	return &dbRepository{pool: r.pool, query: tx}
 }
 
 func databaseError(err error) error {
@@ -76,11 +65,11 @@ type databaseRows struct{ pgx.Rows }
 func (r databaseRows) Scan(dest ...any) error { return databaseError(r.Rows.Scan(dest...)) }
 func (r databaseRows) Err() error             { return databaseError(r.Rows.Err()) }
 func (r *dbRepository) QueryRow(ctx context.Context, q string, args ...any) pgx.Row {
-	return databaseRow{r.query.QueryRow(ctx, q, args...)}
+	return databaseRow{r.q.QueryRow(ctx, q, args...)}
 }
 
 func (r *dbRepository) Query(ctx context.Context, q string, args ...any) (pgx.Rows, error) {
-	rows, err := r.query.Query(ctx, q, args...)
+	rows, err := r.q.Query(ctx, q, args...)
 	if err != nil {
 		return nil, databaseError(err)
 	}
@@ -88,7 +77,7 @@ func (r *dbRepository) Query(ctx context.Context, q string, args ...any) (pgx.Ro
 }
 
 func (r *dbRepository) Exec(ctx context.Context, q string, args ...any) (pgconn.CommandTag, error) {
-	tag, err := r.query.Exec(ctx, q, args...)
+	tag, err := r.q.Exec(ctx, q, args...)
 	return tag, databaseError(err)
 }
 
@@ -370,7 +359,7 @@ func prerequisiteIDs(required []uuid.UUID) []string {
 	return ids
 }
 
-func savePrerequisites(ctx context.Context, tx dbQuerier, kind string, id uuid.UUID, required []uuid.UUID) error {
+func savePrerequisites(ctx context.Context, tx db.Querier, kind string, id uuid.UUID, required []uuid.UUID) error {
 	// Omitted/null keeps existing relations for older clients and drafts; [] clears them.
 	if required == nil {
 		return nil

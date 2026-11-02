@@ -6,6 +6,7 @@ import (
 
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/contenthtml"
+	"nihon-no-hikari-api/pkg/db"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 
 type Repository interface {
 	ContentRepository
+	UseTx(pgx.Tx) Repository
 	List(ctx context.Context) ([]model.Course, error)
 	GetCourseDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetail, error)
 	ListLessons(ctx context.Context, courseID, userID uuid.UUID) ([]model.ModuleLesson, error)
@@ -23,10 +25,23 @@ type Repository interface {
 	UpsertLessonProgress(ctx context.Context, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error)
 }
 
+type dbRepository struct {
+	q db.Querier
+}
+
+func NewRepository(pool *pgxpool.Pool) Repository {
+	return &dbRepository{q: pool}
+}
+
+// UseTx only binds queries; begin, commit and rollback belong to pkg/db.
+func (r *dbRepository) UseTx(tx pgx.Tx) Repository {
+	return &dbRepository{q: tx}
+}
+
 func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error) {
 	if req.Status != nil && *req.Status == model.StatusCompleted {
 		var hasQuiz bool
-		if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM question_sets WHERE lesson_id=$1 AND kind='practice' AND is_published AND archived_at IS NULL)`, lessonID).Scan(&hasQuiz); err != nil {
+		if err := r.q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM question_sets WHERE lesson_id=$1 AND kind='practice' AND is_published AND archived_at IS NULL)`, lessonID).Scan(&hasQuiz); err != nil {
 			return nil, err
 		}
 		if hasQuiz {
@@ -53,7 +68,7 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userI
 	`
 
 	var prerequisitesCompleted bool
-	if err := r.pool.QueryRow(ctx, prerequisiteQuery, lessonID, userID).Scan(&prerequisitesCompleted); err != nil {
+	if err := r.q.QueryRow(ctx, prerequisiteQuery, lessonID, userID).Scan(&prerequisitesCompleted); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, utils.ErrLessonNotFound
 		}
@@ -95,7 +110,7 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userI
 	`
 
 	var progress model.LessonProgress
-	err := r.pool.QueryRow(ctx, query, userID, lessonID, req.Status).Scan(
+	err := r.q.QueryRow(ctx, query, userID, lessonID, req.Status).Scan(
 		&progress.UserID,
 		&progress.LessonID,
 		&progress.Status,
@@ -115,7 +130,7 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userI
 func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgress, error) {
 	if (req.Status != nil && *req.Status == model.StatusCompleted) || req.BestScore != nil {
 		var hasExam bool
-		if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM question_sets WHERE module_id=$1 AND kind='final_exam' AND is_published AND archived_at IS NULL)`, moduleID).Scan(&hasExam); err != nil {
+		if err := r.q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM question_sets WHERE module_id=$1 AND kind='final_exam' AND is_published AND archived_at IS NULL)`, moduleID).Scan(&hasExam); err != nil {
 			return nil, err
 		}
 		if hasExam {
@@ -142,7 +157,7 @@ func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, modul
 		`
 
 		var prerequisitesCompleted bool
-		if err := r.pool.QueryRow(ctx, prerequisiteQuery, courseID, moduleID, userID).Scan(&prerequisitesCompleted); err != nil {
+		if err := r.q.QueryRow(ctx, prerequisiteQuery, courseID, moduleID, userID).Scan(&prerequisitesCompleted); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, utils.ErrModuleNotFound
 			}
@@ -191,7 +206,7 @@ func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, modul
 	`
 
 	var progress model.ModuleProgress
-	err := r.pool.QueryRow(ctx, query, userID, moduleID, courseID, req.Status, req.BestScore).Scan(
+	err := r.q.QueryRow(ctx, query, userID, moduleID, courseID, req.Status, req.BestScore).Scan(
 		&progress.UserID,
 		&progress.ModuleID,
 		&progress.Status,
@@ -241,7 +256,7 @@ func (r *dbRepository) GetCourseDetail(ctx context.Context, courseID, userID uui
 	`
 
 	var course model.CourseDetail
-	if err := r.pool.QueryRow(ctx, query, courseID).Scan(
+	if err := r.q.QueryRow(ctx, query, courseID).Scan(
 		&course.ID,
 		&course.Slug,
 		&course.Title,
@@ -285,7 +300,7 @@ func (r *dbRepository) GetLessonDetail(ctx context.Context, lessonID uuid.UUID) 
 	`
 
 	var lesson model.LessonDetail
-	if err := r.pool.QueryRow(ctx, query, lessonID).Scan(
+	if err := r.q.QueryRow(ctx, query, lessonID).Scan(
 		&lesson.ID,
 		&lesson.Slug,
 		&lesson.Title,
@@ -312,7 +327,7 @@ func (r *dbRepository) ListLessons(ctx context.Context, courseID, userID uuid.UU
 		WHERE id = $1 AND is_published = true
 	`
 
-	if err := r.pool.QueryRow(ctx, courseQuery, courseID).Scan(&courseID); err != nil {
+	if err := r.q.QueryRow(ctx, courseQuery, courseID).Scan(&courseID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, utils.ErrCourseNotFound
 		}
@@ -366,7 +381,7 @@ func (r *dbRepository) ListLessons(ctx context.Context, courseID, userID uuid.UU
 		ORDER BY m.order_index ASC, ls.order_index ASC
 	`
 
-	lessonRows, err := r.pool.Query(ctx, lessonQuery, courseID, userID)
+	lessonRows, err := r.q.Query(ctx, lessonQuery, courseID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +441,7 @@ func (r *dbRepository) listModules(ctx context.Context, courseID, userID uuid.UU
 		ORDER BY m.order_index ASC
 	`
 
-	rows, err := r.pool.Query(ctx, query, courseID, userID)
+	rows, err := r.q.Query(ctx, query, courseID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -454,15 +469,6 @@ func (r *dbRepository) listModules(ctx context.Context, courseID, userID uuid.UU
 	}
 
 	return modules, nil
-}
-
-type dbRepository struct {
-	query dbQuerier
-	pool  *pgxpool.Pool
-}
-
-func NewRepository(pool *pgxpool.Pool) Repository {
-	return &dbRepository{pool: pool, query: pool}
 }
 
 func (r *dbRepository) List(ctx context.Context) ([]model.Course, error) {
@@ -496,7 +502,7 @@ func (r *dbRepository) List(ctx context.Context) ([]model.Course, error) {
 		ORDER BY l.order_index ASC, c.order_index ASC, c.created_at ASC
 	`
 
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := r.q.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}

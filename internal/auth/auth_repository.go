@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"nihon-no-hikari-api/pkg/db"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 )
 
 type Repository interface {
+	UseTx(tx pgx.Tx) Repository
 	CreateSession(ctx context.Context, session UserSession) error
 	GetSession(ctx context.Context, refreshToken string) (UserSession, error)
 	UpdateRefreshToken(ctx context.Context, sessionId uuid.UUID, refreshToken string) error
@@ -19,18 +21,22 @@ type Repository interface {
 }
 
 type dbRepository struct {
-	pool *pgxpool.Pool
+	q db.Querier
+}
+
+func (r *dbRepository) UseTx(tx pgx.Tx) Repository {
+	return &dbRepository{q: tx}
 }
 
 // BlockSessionById implements [Repository].
-func (db *dbRepository) BlockSessionById(ctx context.Context, sessionId string) error {
+func (r *dbRepository) BlockSessionById(ctx context.Context, sessionId string) error {
 	sql := `
 		UPDATE user_sessions
 		SET is_blocked = $1
 		WHERE id = $2
 	`
 
-	cmdTag, err := db.pool.Exec(ctx, sql, true, sessionId)
+	cmdTag, err := r.q.Exec(ctx, sql, true, sessionId)
 	if err != nil {
 		return err
 	}
@@ -42,14 +48,14 @@ func (db *dbRepository) BlockSessionById(ctx context.Context, sessionId string) 
 }
 
 // CreateSession implements [Repository].
-func (db *dbRepository) CreateSession(ctx context.Context, session UserSession) error {
+func (r *dbRepository) CreateSession(ctx context.Context, session UserSession) error {
 	q := `
 		INSERT INTO user_sessions (
 			id, user_id, refresh_token, user_agent, client_ip, is_blocked, expires_at
 		) VALUES ($1,$2,$3,$4,$5,$6,$7)
 	`
 
-	_, err := db.pool.Exec(
+	_, err := r.q.Exec(
 		ctx,
 		q,
 		session.ID,
@@ -68,13 +74,13 @@ func (db *dbRepository) CreateSession(ctx context.Context, session UserSession) 
 }
 
 // GetSession implements [Repository].
-func (db *dbRepository) GetSession(ctx context.Context, refreshToken string) (UserSession, error) {
+func (r *dbRepository) GetSession(ctx context.Context, refreshToken string) (UserSession, error) {
 	sql := `
 		SELECT id, user_id, refresh_token, user_agent, client_ip, expires_at
 		FROM user_sessions
 		WHERE refresh_token = $1 AND is_blocked = false;
 	`
-	row := db.pool.QueryRow(ctx, sql, refreshToken)
+	row := r.q.QueryRow(ctx, sql, refreshToken)
 
 	var session UserSession
 	err := row.Scan(
@@ -96,14 +102,14 @@ func (db *dbRepository) GetSession(ctx context.Context, refreshToken string) (Us
 }
 
 // UpdateRefreshToken implements [Repository].
-func (db *dbRepository) UpdateRefreshToken(ctx context.Context, sessionId uuid.UUID, refreshToken string) error {
+func (r *dbRepository) UpdateRefreshToken(ctx context.Context, sessionId uuid.UUID, refreshToken string) error {
 	sql := `
 		UPDATE user_sessions
 		SET refresh_token = $1
 		WHERE id = $2
 	`
 
-	_, err := db.pool.Exec(ctx, sql, refreshToken, sessionId)
+	_, err := r.q.Exec(ctx, sql, refreshToken, sessionId)
 	if err != nil {
 		return err
 	}
@@ -111,6 +117,6 @@ func (db *dbRepository) UpdateRefreshToken(ctx context.Context, sessionId uuid.U
 	return nil
 }
 
-func NewRepository(db *pgxpool.Pool) Repository {
-	return &dbRepository{pool: db}
+func NewRepository(pool *pgxpool.Pool) Repository {
+	return &dbRepository{q: pool}
 }

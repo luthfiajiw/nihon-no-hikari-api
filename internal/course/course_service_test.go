@@ -11,7 +11,7 @@ import (
 )
 
 type lessonProgressRepositoryStub struct {
-	ContentRepository
+	Repository
 	upsertCalled bool
 	lesson       *model.LessonDetail
 }

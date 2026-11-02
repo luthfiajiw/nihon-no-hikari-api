@@ -17,7 +17,7 @@ import (
 // Embedding an unimplemented repository makes unexpected persistence calls fail.
 type contentRepositoryStub struct {
 	Repository
-	active        ContentRepository
+	active        Repository
 	boundTx       pgx.Tx
 	state         func(context.Context, string, uuid.UUID) (model.ContentState, error)
 	draft         func(context.Context, string, uuid.UUID) (json.RawMessage, error)
@@ -57,7 +57,7 @@ func newStubService(repository Repository) Service {
 	return NewService(&transactionRunnerStub{}, repository, nil)
 }
 
-func (r *contentRepositoryStub) UseTx(tx pgx.Tx) ContentRepository {
+func (r *contentRepositoryStub) UseTx(tx pgx.Tx) Repository {
 	r.boundTx = tx
 	if r.active != nil {
 		return r.active

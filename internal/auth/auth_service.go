@@ -94,7 +94,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) error {
 	req.Password = hashPassword
 
 	err = s.tx.Exec(ctx, func(tx pgx.Tx) error {
-		_, err := s.userRepo.CreateTx(ctx, tx, user.UserParams{
+		_, err := s.userRepo.UseTx(tx).Create(ctx, user.UserParams{
 			DisplayName:     req.DisplayName,
 			Email:           req.Email,
 			Password:        req.Password,

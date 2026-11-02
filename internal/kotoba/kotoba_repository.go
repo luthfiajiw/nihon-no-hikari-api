@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"nihon-no-hikari-api/pkg/db"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -30,15 +32,10 @@ type Repository interface {
 	CompleteCleanup(context.Context, uuid.UUID) error
 	RetryCleanup(context.Context, uuid.UUID, time.Time) error
 }
-type querier interface {
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-	QueryRow(context.Context, string, ...any) pgx.Row
-}
-type repository struct{ q querier }
+type dbRepository struct{ q db.Querier }
 
-func NewRepository(pool *pgxpool.Pool) Repository { return &repository{q: pool} }
-func (r *repository) UseTx(tx pgx.Tx) Repository  { return &repository{q: tx} }
+func NewRepository(pool *pgxpool.Pool) Repository  { return &dbRepository{q: pool} }
+func (r *dbRepository) UseTx(tx pgx.Tx) Repository { return &dbRepository{q: tx} }
 func dbError(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
@@ -92,7 +89,7 @@ func scanTopic(row interface{ Scan(...any) error }) (Topic, error) {
 	}
 	return t, nil
 }
-func (r *repository) List(ctx context.Context, f Filter, admin bool) ([]Topic, error) {
+func (r *dbRepository) List(ctx context.Context, f Filter, admin bool) ([]Topic, error) {
 	order := map[string]string{"order": "t.order_index ASC,t.id ASC", "title": "t.title ASC,t.id ASC", "newest": "t.created_at DESC,t.id ASC", "vocabulary": "15 DESC,t.id ASC"}[f.Sort]
 	if order == "" {
 		return nil, FieldErrors{"sort": "Pengurutan tidak valid."}
@@ -116,15 +113,15 @@ func (r *repository) List(ctx context.Context, f Filter, admin bool) ([]Topic, e
 	}
 	return result, rows.Err()
 }
-func (r *repository) Get(ctx context.Context, id uuid.UUID, admin bool) (Topic, error) {
+func (r *dbRepository) Get(ctx context.Context, id uuid.UUID, admin bool) (Topic, error) {
 	return scanTopic(r.q.QueryRow(ctx, `SELECT `+topicColumns+`,`+vocabularyJSON+topicFrom+` WHERE t.id=$1 AND ($2 OR t.is_active)`, id, admin))
 }
-func (r *repository) LockTopic(ctx context.Context, id uuid.UUID) (int64, error) {
+func (r *dbRepository) LockTopic(ctx context.Context, id uuid.UUID) (int64, error) {
 	var version int64
 	err := r.q.QueryRow(ctx, `SELECT version FROM kotoba_topics WHERE id=$1 FOR UPDATE`, id).Scan(&version)
 	return version, dbError(err)
 }
-func (r *repository) TopicMedia(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
+func (r *dbRepository) TopicMedia(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := r.q.Query(ctx, `SELECT cover_media_id FROM kotoba_topics WHERE id=$1 UNION SELECT audio_media_id FROM kotoba_vocabularies WHERE topic_id=$1 AND audio_media_id IS NOT NULL`, id)
 	if err != nil {
 		return nil, err
@@ -140,7 +137,7 @@ func (r *repository) TopicMedia(ctx context.Context, id uuid.UUID) ([]uuid.UUID,
 	}
 	return ids, rows.Err()
 }
-func (r *repository) VocabularyIDs(ctx context.Context, id uuid.UUID) (map[uuid.UUID]bool, error) {
+func (r *dbRepository) VocabularyIDs(ctx context.Context, id uuid.UUID) (map[uuid.UUID]bool, error) {
 	rows, err := r.q.Query(ctx, `SELECT id FROM kotoba_vocabularies WHERE topic_id=$1`, id)
 	if err != nil {
 		return nil, err
@@ -156,7 +153,7 @@ func (r *repository) VocabularyIDs(ctx context.Context, id uuid.UUID) (map[uuid.
 	}
 	return ids, rows.Err()
 }
-func (r *repository) Save(ctx context.Context, id uuid.UUID, in TopicInput, create bool) error {
+func (r *dbRepository) Save(ctx context.Context, id uuid.UUID, in TopicInput, create bool) error {
 	args := []any{id, in.Title, in.Level, in.Category, in.Description, in.OrderIndex, in.IsActive, in.IsVisible, in.CoverMediaID}
 	query := `INSERT INTO kotoba_topics(id,title,level_id,category,description,order_index,is_active,is_visible,cover_media_id)
         SELECT $1,$2,l.id,$4,$5,$6,$7,$8,$9 FROM levels l WHERE l.code=$3`
@@ -192,16 +189,16 @@ func (r *repository) Save(ctx context.Context, id uuid.UUID, in TopicInput, crea
 	}
 	return nil
 }
-func (r *repository) Remove(ctx context.Context, id uuid.UUID) error {
+func (r *dbRepository) Remove(ctx context.Context, id uuid.UUID) error {
 	_, err := r.q.Exec(ctx, `DELETE FROM kotoba_topics WHERE id=$1`, id)
 	return err
 }
-func (r *repository) InsertMedia(ctx context.Context, m Media) error {
+func (r *dbRepository) InsertMedia(ctx context.Context, m Media) error {
 	_, err := r.q.Exec(ctx, `INSERT INTO kotoba_media(id,kind,bucket,object_path,mime_type,size_bytes,uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7)`,
 		m.ID, m.Kind, m.Bucket, m.ObjectPath, m.MIMEType, m.SizeBytes, m.UploadedBy)
 	return err
 }
-func (r *repository) ReadyMedia(ctx context.Context, id uuid.UUID) error {
+func (r *dbRepository) ReadyMedia(ctx context.Context, id uuid.UUID) error {
 	tag, err := r.q.Exec(ctx, `UPDATE kotoba_media SET status='ready' WHERE id=$1 AND status='uploading'`, id)
 	if err != nil {
 		return err
@@ -219,12 +216,12 @@ func scanMedia(row interface{ Scan(...any) error }) (Media, error) {
 	err := row.Scan(&m.ID, &m.Kind, &m.Bucket, &m.ObjectPath, &m.MIMEType, &m.SizeBytes, &m.UploadedBy, &m.Status, &m.Attempts)
 	return m, dbError(err)
 }
-func (r *repository) LockMedia(ctx context.Context, id uuid.UUID) (Media, error) {
+func (r *dbRepository) LockMedia(ctx context.Context, id uuid.UUID) (Media, error) {
 	return scanMedia(r.q.QueryRow(ctx, `SELECT `+mediaColumns+` FROM kotoba_media WHERE id=$1 FOR UPDATE`, id))
 }
 
 // Call while holding every affected media row lock, after changing the references.
-func (r *repository) ScheduleUnused(ctx context.Context, ids []uuid.UUID) error {
+func (r *dbRepository) ScheduleUnused(ctx context.Context, ids []uuid.UUID) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -247,7 +244,7 @@ func uuidStrings(ids []uuid.UUID) []string {
 
 // The deleting state is committed before the remote request. Attachments lock the
 // same row and accept only ready media, so a claimed object cannot be reattached.
-func (r *repository) ClaimCleanup(ctx context.Context, now time.Time) (Media, error) {
+func (r *dbRepository) ClaimCleanup(ctx context.Context, now time.Time) (Media, error) {
 	return scanMedia(r.q.QueryRow(ctx, `WITH candidate AS (
         SELECT m.id FROM kotoba_media m WHERE m.cleanup_after <= $1
         AND (m.retry_after IS NULL OR m.retry_after <= $1)
@@ -257,11 +254,11 @@ func (r *repository) ClaimCleanup(ctx context.Context, now time.Time) (Media, er
         UPDATE kotoba_media SET status='deleting',attempts=attempts+1,retry_after=$1+interval '5 minutes'
         WHERE id IN (SELECT id FROM candidate) RETURNING `+mediaColumns, now))
 }
-func (r *repository) CompleteCleanup(ctx context.Context, id uuid.UUID) error {
+func (r *dbRepository) CompleteCleanup(ctx context.Context, id uuid.UUID) error {
 	_, err := r.q.Exec(ctx, `DELETE FROM kotoba_media WHERE id=$1 AND status='deleting'`, id)
 	return err
 }
-func (r *repository) RetryCleanup(ctx context.Context, id uuid.UUID, retry time.Time) error {
+func (r *dbRepository) RetryCleanup(ctx context.Context, id uuid.UUID, retry time.Time) error {
 	_, err := r.q.Exec(ctx, `UPDATE kotoba_media SET retry_after=$2 WHERE id=$1 AND status='deleting'`, id, retry)
 	return err
 }

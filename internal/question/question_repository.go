@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"nihon-no-hikari-api/pkg/db"
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
@@ -65,7 +66,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, questionSetID, 
 	`
 
 	detail := &QuestionSetDetail{}
-	err := r.pool.QueryRow(ctx, query, questionSetID, userID).Scan(
+	err := r.q.QueryRow(ctx, query, questionSetID, userID).Scan(
 		&detail.ID,
 		&detail.LessonID,
 		&detail.ModuleID,
@@ -89,7 +90,7 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, questionSetID, 
 		return nil, err
 	}
 
-	detail.Questions, err = loadQuestionSetQuestions(ctx, r.pool, questionSetID, detail.ShuffleQuestions)
+	detail.Questions, err = loadQuestionSetQuestions(ctx, r.q, questionSetID, detail.ShuffleQuestions)
 	if err != nil {
 		return nil, err
 	}
@@ -97,12 +98,12 @@ func (r *dbRepository) GetQuestionSetDetail(ctx context.Context, questionSetID, 
 }
 
 type dbRepository struct {
-	query dbQuerier
-	pool  *pgxpool.Pool
+	q    db.Querier
+	pool *pgxpool.Pool
 }
 
 func NewRepository(pool *pgxpool.Pool) Repository {
-	return &dbRepository{pool: pool, query: pool}
+	return &dbRepository{pool: pool, q: pool}
 }
 
 func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uuid.UUID) ([]QuestionSet, error) {
@@ -120,7 +121,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uu
 	`
 
 	var lessonExists bool
-	if err := r.pool.QueryRow(ctx, lessonQuery, lessonID).Scan(&lessonExists); err != nil {
+	if err := r.q.QueryRow(ctx, lessonQuery, lessonID).Scan(&lessonExists); err != nil {
 		return nil, err
 	}
 	if !lessonExists {
@@ -160,7 +161,7 @@ func (r *dbRepository) ListQuestionSets(ctx context.Context, lessonID, userID uu
 		ORDER BY qs.order_index, qs.id
 	`
 
-	rows, err := r.pool.Query(ctx, query, lessonID, userID)
+	rows, err := r.q.Query(ctx, query, lessonID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +213,7 @@ func (r *dbRepository) ListModuleExams(ctx context.Context, moduleID, userID uui
 		WHERE qs.module_id=$1 AND qs.kind='final_exam' AND qs.is_published AND qs.archived_at IS NULL
 			AND m.is_published AND c.is_published
 		GROUP BY qs.id ORDER BY qs.order_index,qs.id`
-	rows, err := r.pool.Query(ctx, query, moduleID, userID)
+	rows, err := r.q.Query(ctx, query, moduleID, userID)
 	if err != nil {
 		return nil, err
 	}

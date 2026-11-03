@@ -486,6 +486,8 @@ definitions:
       translation:
         type: string
       type:
+        allOf:
+        - $ref: '#/definitions/internal_kotoba.VocabularyType'
         default: other
         enum:
         - verb
@@ -497,7 +499,6 @@ definitions:
         - counter
         - day_date_month
         - other
-        type: string
     type: object
   internal_kotoba.VocabularyInput:
     properties:
@@ -520,6 +521,8 @@ definitions:
       translation:
         type: string
       type:
+        allOf:
+        - $ref: '#/definitions/internal_kotoba.VocabularyType'
         default: other
         enum:
         - verb
@@ -531,8 +534,29 @@ definitions:
         - counter
         - day_date_month
         - other
-        type: string
     type: object
+  internal_kotoba.VocabularyType:
+    enum:
+    - verb
+    - adjective
+    - adverb
+    - question_word
+    - noun
+    - family_member
+    - counter
+    - day_date_month
+    - other
+    type: string
+    x-enum-varnames:
+    - TypeVerb
+    - TypeAdjective
+    - TypeAdverb
+    - TypeQuestionWord
+    - TypeNoun
+    - TypeFamilyMember
+    - TypeCounter
+    - TypeDayDateMonth
+    - TypeOther
   internal_question.AbandonAttemptResponse:
     properties:
       message:
@@ -683,6 +707,8 @@ definitions:
     type: object
   internal_question.Question:
     properties:
+      explanation:
+        type: string
       id:
         type: string
       options:
@@ -741,6 +767,8 @@ definitions:
     properties:
       id:
         type: string
+      is_correct:
+        type: boolean
       label:
         type: string
       media_url:

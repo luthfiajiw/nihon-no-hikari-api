@@ -35,6 +35,7 @@ type QuestionOption struct {
 	Label      string    `json:"label"`
 	MediaURL   *string   `json:"media_url"`
 	OrderIndex int16     `json:"order_index"`
+	IsCorrect  *bool     `json:"is_correct,omitempty"`
 }
 
 type StrokePoint = kanastroke.Point
@@ -54,6 +55,7 @@ type Question struct {
 	PromptText       string           `json:"prompt_text"`
 	StimulusText     *string          `json:"stimulus_text"`
 	StimulusMediaURL *string          `json:"stimulus_media_url"`
+	Explanation      *string          `json:"explanation,omitempty"`
 	Points           int16            `json:"points"`
 	OrderIndex       int16            `json:"order_index"`
 	Options          []QuestionOption `json:"options"`

@@ -83,3 +83,72 @@ func TestGradeAnswerRejectsStrokeWithoutServerEvaluator(t *testing.T) {
 		t.Fatalf("gradeAnswer() error = %v, want ErrInvalidQuestionConfiguration", err)
 	}
 }
+
+func TestQuestionAndOptionJSONSerialization(t *testing.T) {
+	t.Run("omits is_correct and explanation when nil", func(t *testing.T) {
+		q := Question{
+			ID:           uuid.New(),
+			QuestionType: QuestionTypeMultipleChoice,
+			Skill:        SkillReading,
+			PromptText:   "Pertanyaan",
+			Points:       1,
+			Options: []QuestionOption{{
+				ID:    uuid.New(),
+				Label: "Pilihan",
+			}},
+		}
+
+		data, err := json.Marshal(q)
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+		raw := string(data)
+		if strings.Contains(raw, "is_correct") {
+			t.Fatalf("JSON should omit is_correct when nil, got: %s", raw)
+		}
+		if strings.Contains(raw, "explanation") {
+			t.Fatalf("JSON should omit explanation when nil, got: %s", raw)
+		}
+	})
+
+	t.Run("includes is_correct and explanation when provided", func(t *testing.T) {
+		trueVal := true
+		falseVal := false
+		explanation := "Ini penjelasannya"
+		q := Question{
+			ID:           uuid.New(),
+			QuestionType: QuestionTypeMultipleChoice,
+			Skill:        SkillReading,
+			PromptText:   "Pertanyaan",
+			Explanation:  &explanation,
+			Points:       1,
+			Options: []QuestionOption{
+				{
+					ID:        uuid.New(),
+					Label:     "Pilihan A",
+					IsCorrect: &trueVal,
+				},
+				{
+					ID:        uuid.New(),
+					Label:     "Pilihan B",
+					IsCorrect: &falseVal,
+				},
+			},
+		}
+
+		data, err := json.Marshal(q)
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+		raw := string(data)
+		if !strings.Contains(raw, `"is_correct":true`) {
+			t.Fatalf("JSON should include \"is_correct\":true, got: %s", raw)
+		}
+		if !strings.Contains(raw, `"is_correct":false`) {
+			t.Fatalf("JSON should include \"is_correct\":false, got: %s", raw)
+		}
+		if !strings.Contains(raw, `"explanation":"Ini penjelasannya"`) {
+			t.Fatalf("JSON should include explanation, got: %s", raw)
+		}
+	})
+}

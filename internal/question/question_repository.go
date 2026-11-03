@@ -362,7 +362,8 @@ func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID u
 		}
 	}
 
-	questions, err := loadAttemptQuestions(ctx, tx, questionSetID, set.QuestionCount, set.ShuffleQuestions)
+	includeAnswerKey := set.Kind == QuestionSetKindPractice
+	questions, err := loadAttemptQuestions(ctx, tx, questionSetID, set.QuestionCount, set.ShuffleQuestions, includeAnswerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -456,11 +457,12 @@ func (r *dbRepository) AbandonAttempt(ctx context.Context, questionSetID, attemp
 	return tx.Commit(ctx)
 }
 
-func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUID, limit int32, shuffle bool) ([]Question, error) {
+func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUID, limit int32, shuffle bool, includeAnswerKey bool) ([]Question, error) {
 	const query = `
 		SELECT q.id, q.question_type, q.skill, q.prompt_text, q.stimulus_text, q.stimulus_media_url,
 			q.points, q.order_index, t.character, t.romaji, t.stroke_data,
-			CASE WHEN q.question_type = 'stroke_writing' THEN q.show_writing_guide END
+			CASE WHEN q.question_type = 'stroke_writing' THEN q.show_writing_guide END,
+			CASE WHEN $4 THEN NULLIF(BTRIM(q.explanation), '') END
 		FROM questions q
 		LEFT JOIN kana_stroke_templates t ON t.id = q.stroke_template_id
 		WHERE q.question_set_id = $1
@@ -470,7 +472,7 @@ func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUI
 			q.id
 		LIMIT $2
 	`
-	rows, err := tx.Query(ctx, query, questionSetID, limit, shuffle)
+	rows, err := tx.Query(ctx, query, questionSetID, limit, shuffle, includeAnswerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -492,6 +494,7 @@ func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUI
 			&romaji,
 			&strokeData,
 			&item.ShowWritingGuide,
+			&item.Explanation,
 		); err != nil {
 			return nil, err
 		}
@@ -509,7 +512,7 @@ func loadAttemptQuestions(ctx context.Context, tx pgx.Tx, questionSetID uuid.UUI
 		if !questions[index].Skill.IsSupported() {
 			return nil, utils.ErrUnsupportedQuestionSkill
 		}
-		questions[index].Options, err = loadQuestionOptions(ctx, tx, questions[index].ID)
+		questions[index].Options, err = loadQuestionOptions(ctx, tx, questions[index].ID, includeAnswerKey)
 		if err != nil {
 			return nil, err
 		}
@@ -577,7 +580,7 @@ func loadQuestionSetQuestions(ctx context.Context, querier rowsQuerier, question
 		if !questions[index].Skill.IsSupported() {
 			return nil, utils.ErrUnsupportedQuestionSkill
 		}
-		questions[index].Options, err = loadQuestionOptions(ctx, querier, questions[index].ID)
+		questions[index].Options, err = loadQuestionOptions(ctx, querier, questions[index].ID, false)
 		if err != nil {
 			return nil, err
 		}
@@ -603,9 +606,9 @@ func assignWritingGuide(item *Question, character, romaji *string, strokeData []
 	return nil
 }
 
-func loadQuestionOptions(ctx context.Context, querier rowsQuerier, questionID uuid.UUID) ([]QuestionOption, error) {
+func loadQuestionOptions(ctx context.Context, querier rowsQuerier, questionID uuid.UUID, includeAnswerKey bool) ([]QuestionOption, error) {
 	const query = `
-		SELECT id, label, media_url, order_index
+		SELECT id, label, media_url, order_index, is_correct
 		FROM question_options
 		WHERE question_id = $1
 		ORDER BY order_index, id
@@ -619,8 +622,13 @@ func loadQuestionOptions(ctx context.Context, querier rowsQuerier, questionID uu
 	options := make([]QuestionOption, 0)
 	for rows.Next() {
 		var option QuestionOption
-		if err := rows.Scan(&option.ID, &option.Label, &option.MediaURL, &option.OrderIndex); err != nil {
+		var isCorrect bool
+		if err := rows.Scan(&option.ID, &option.Label, &option.MediaURL, &option.OrderIndex, &isCorrect); err != nil {
 			return nil, err
+		}
+		if includeAnswerKey {
+			val := isCorrect
+			option.IsCorrect = &val
 		}
 		options = append(options, option)
 	}

@@ -76,10 +76,13 @@ Contoh question:
 POST /api/v1/question-sets/{questionSetId}/attempts
 ```
 
-Endpoint membuat attempt dan mengembalikan soal beserta stimulus dan opsi tanpa
-`is_correct`. Urutan soal mengikuti `shuffle_questions`, sedangkan jumlahnya
-mengikuti `total_questions`. `expires_at` tersedia jika question set memiliki
-batas waktu.
+Endpoint membuat attempt dan mengembalikan soal beserta stimulus dan opsi. Untuk
+question set jenis `practice`, endpoint menyertakan `options[].is_correct` dan
+`questions[].explanation` guna mendukung umpan balik langsung pada pilihan ganda.
+Untuk question set jenis `final_exam`, kedua field tersebut tetap disembunyikan
+(`omitted`) sampai attempt disubmit. Urutan soal mengikuti `shuffle_questions`,
+sedangkan jumlahnya mengikuti `total_questions`. `expires_at` tersedia jika
+question set memiliki batas waktu.
 
 ## 4. Submit attempt
 

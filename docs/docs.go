@@ -4944,7 +4944,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string",
                     "default": "other",
                     "enum": [
                         "verb",
@@ -4956,6 +4955,11 @@ const docTemplate = `{
                         "counter",
                         "day_date_month",
                         "other"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_kotoba.VocabularyType"
+                        }
                     ]
                 }
             }
@@ -4991,7 +4995,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string",
                     "default": "other",
                     "enum": [
                         "verb",
@@ -5003,9 +5006,39 @@ const docTemplate = `{
                         "counter",
                         "day_date_month",
                         "other"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_kotoba.VocabularyType"
+                        }
                     ]
                 }
             }
+        },
+        "internal_kotoba.VocabularyType": {
+            "type": "string",
+            "enum": [
+                "verb",
+                "adjective",
+                "adverb",
+                "question_word",
+                "noun",
+                "family_member",
+                "counter",
+                "day_date_month",
+                "other"
+            ],
+            "x-enum-varnames": [
+                "TypeVerb",
+                "TypeAdjective",
+                "TypeAdverb",
+                "TypeQuestionWord",
+                "TypeNoun",
+                "TypeFamilyMember",
+                "TypeCounter",
+                "TypeDayDateMonth",
+                "TypeOther"
+            ]
         },
         "internal_question.AbandonAttemptResponse": {
             "type": "object",
@@ -5227,6 +5260,9 @@ const docTemplate = `{
         "internal_question.Question": {
             "type": "object",
             "properties": {
+                "explanation": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -5312,6 +5348,9 @@ const docTemplate = `{
             "properties": {
                 "id": {
                     "type": "string"
+                },
+                "is_correct": {
+                    "type": "boolean"
                 },
                 "label": {
                     "type": "string"

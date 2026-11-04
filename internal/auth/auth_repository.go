@@ -18,6 +18,31 @@ type Repository interface {
 	GetSession(ctx context.Context, refreshToken string) (UserSession, error)
 	UpdateRefreshToken(ctx context.Context, sessionId uuid.UUID, refreshToken string) error
 	BlockSessionById(ctx context.Context, sessionId string) error
+	FindIdentityUserID(ctx context.Context, provider string, sub string) (uuid.UUID, error)
+	CreateIdentity(ctx context.Context, userID uuid.UUID, provider string, sub string, email string) error
+}
+
+// FindIdentityUserID implements [Repository].
+func (r *dbRepository) FindIdentityUserID(ctx context.Context, provider string, sub string) (uuid.UUID, error) {
+	var userID uuid.UUID
+	err := r.q.QueryRow(ctx, `
+		SELECT user_id FROM user_identities WHERE provider = $1 AND provider_sub = $2
+	`, provider, sub).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, utils.ErrUserNotFound
+		}
+		return uuid.Nil, err
+	}
+	return userID, nil
+}
+
+// CreateIdentity implements [Repository].
+func (r *dbRepository) CreateIdentity(ctx context.Context, userID uuid.UUID, provider string, sub string, email string) error {
+	_, err := r.q.Exec(ctx, `
+		INSERT INTO user_identities (user_id, provider, provider_sub, email) VALUES ($1,$2,$3,$4)
+	`, userID, provider, sub, email)
+	return err
 }
 
 type dbRepository struct {

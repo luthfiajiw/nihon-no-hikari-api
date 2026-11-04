@@ -20,13 +20,17 @@ type Service interface {
 	SignIn(ctx context.Context, req SignInRequest, userAgent string, clientIP string) (*SignInResponse, error)
 	Logout(ctx context.Context, req LogoutRequest) error
 	RefreshAccessToken(ctx context.Context, req TokenRequest) (*RefreshTokenResponse, error)
+	GoogleSignIn(ctx context.Context, req GoogleSignInRequest, userAgent string, clientIP string) (*SignInResponse, error)
 }
+
+const googleProvider = "google"
 
 type service struct {
 	tx       db.WithTx
 	cfg      *config.Config
 	authRepo Repository
 	userRepo user.Repository
+	google   GoogleVerifier
 }
 
 // Logout implements [Service].
@@ -127,6 +131,68 @@ func (s *service) SignIn(ctx context.Context, req SignInRequest, userAgent strin
 		return nil, utils.ErrInvalidCredentials
 	}
 
+	return s.issueSession(ctx, userDetail, userAgent, clientIP)
+}
+
+// GoogleSignIn implements [Service].
+func (s *service) GoogleSignIn(ctx context.Context, req GoogleSignInRequest, userAgent string, clientIP string) (*SignInResponse, error) {
+	claims, err := s.google.Verify(ctx, req.IDToken)
+	if err != nil {
+		return nil, err
+	}
+	if !claims.EmailVerified {
+		return nil, utils.ErrGoogleEmailNotVerified
+	}
+
+	var userDetail user.User
+	err = s.tx.Exec(ctx, func(tx pgx.Tx) error {
+		authRepo := s.authRepo.UseTx(tx)
+		userRepo := s.userRepo.UseTx(tx)
+
+		userID, err := authRepo.FindIdentityUserID(ctx, googleProvider, claims.Sub)
+		if err == nil {
+			userDetail, err = userRepo.FindBy(ctx, user.FindUserParam{ID: userID})
+			return err
+		}
+		if !errors.Is(err, utils.ErrUserNotFound) {
+			return err
+		}
+
+		// First Google login: link to a user with the same verified email, else create one.
+		userDetail, err = userRepo.FindBy(ctx, user.FindUserParam{Email: claims.Email})
+		if err != nil {
+			if !errors.Is(err, utils.ErrUserNotFound) && !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+			var avatar *string
+			if claims.Picture != "" {
+				avatar = &claims.Picture
+			}
+			displayName := claims.Name
+			if displayName == "" {
+				displayName = claims.Email
+			}
+			userDetail, err = userRepo.CreateOAuth(ctx, user.OAuthUserParams{
+				DisplayName: displayName,
+				Email:       claims.Email,
+				AvatarURL:   avatar,
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		return authRepo.CreateIdentity(ctx, userDetail.ID, googleProvider, claims.Sub, claims.Email)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return s.issueSession(ctx, userDetail, userAgent, clientIP)
+}
+
+// issueSession creates the access/refresh tokens and persists the session for userDetail.
+func (s *service) issueSession(ctx context.Context, userDetail user.User, userAgent string, clientIP string) (*SignInResponse, error) {
 	accessTokenID, err := uuid.NewRandom()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create access token id: %w", err)
@@ -182,11 +248,12 @@ func (s *service) SignIn(ctx context.Context, req SignInRequest, userAgent strin
 	return res, nil
 }
 
-func NewService(tx db.WithTx, cfg *config.Config, authRepo Repository, userRepo user.Repository) Service {
+func NewService(tx db.WithTx, cfg *config.Config, authRepo Repository, userRepo user.Repository, google GoogleVerifier) Service {
 	return &service{
 		tx:       tx,
 		cfg:      cfg,
 		authRepo: authRepo,
 		userRepo: userRepo,
+		google:   google,
 	}
 }

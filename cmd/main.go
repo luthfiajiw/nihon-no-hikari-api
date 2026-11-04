@@ -61,7 +61,7 @@ func main() {
 	kotobaRepo := kotoba.NewRepository(pool)
 
 	// SERVICES
-	authService := auth.NewService(tx, cfg, authRepo, userRepo)
+	authService := auth.NewService(tx, cfg, authRepo, userRepo, auth.NewGoogleVerifier(cfg.GoogleClientID))
 	courseService := course.NewService(tx, courseRepo, questionRepo)
 	questionService := question.NewService(tx, questionRepo)
 	storage := supabasestorage.New(cfg.SupabaseURL, cfg.SupabaseServiceKey, nil)

@@ -28,6 +28,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	authGroup := app.Group("/api/v1/auth")
 	authGroup.Post("/register", h.register)
 	authGroup.Post("/signin", h.signIn)
+	authGroup.Post("/google", h.google)
 	authGroup.Post("/token", h.token)
 	authGroup.Post("/signout", h.signout)
 }
@@ -129,6 +130,55 @@ func (h *Handler) signIn(c fiber.Ctx) error {
 			Success: false,
 			Error:   err.Error(),
 		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+// google godoc
+// @Summary Masuk dengan Google
+// @Description Memverifikasi Google ID token, menautkan atau membuat akun, lalu membuat sesi baru.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body GoogleSignInRequest true "Google ID token"
+// @Success 200 {object} SignInResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Failure 503 {object} utils.ErrorRes
+// @Router /auth/google [post]
+func (h *Handler) google(c fiber.Ctx) error {
+	var req GoogleSignInRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{
+			Success: false,
+			Error:   err.Error(),
+		})
+	}
+
+	if validationErr := h.validator.Validate(req); validationErr != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(validationErr)
+	}
+
+	res, err := h.service.GoogleSignIn(c.Context(), req, c.Get("User-Agent"), c.IP())
+	if err != nil {
+		status := fiber.StatusInternalServerError
+		switch {
+		case errors.Is(err, utils.ErrInvalidGoogleToken), errors.Is(err, utils.ErrGoogleEmailNotVerified):
+			status = fiber.StatusUnauthorized
+		case errors.Is(err, utils.ErrGoogleSignInDisabled):
+			status = fiber.StatusServiceUnavailable
+		}
+		message := err.Error()
+		if status == fiber.StatusUnauthorized {
+			// Do not leak verifier internals to the client.
+			message = utils.ErrInvalidGoogleToken.Error()
+			if errors.Is(err, utils.ErrGoogleEmailNotVerified) {
+				message = utils.ErrGoogleEmailNotVerified.Error()
+			}
+		}
+		return c.Status(status).JSON(utils.ErrorRes{Success: false, Error: message})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(res)

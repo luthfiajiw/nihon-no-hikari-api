@@ -14,6 +14,7 @@ type Repository interface {
 	UseTx(tx pgx.Tx) Repository
 	FindBy(ctx context.Context, params FindUserParam) (User, error)
 	Create(ctx context.Context, params UserParams) (User, error)
+	CreateOAuth(ctx context.Context, params OAuthUserParams) (User, error)
 }
 
 type dbRepository struct {
@@ -71,13 +72,40 @@ func (r *dbRepository) FindBy(ctx context.Context, params FindUserParam) (User, 
 	}
 
 	var user User
-	err := row.Scan(&user.ID, &user.Email, &user.DisplayName, &user.AvatarURL, &user.Password, &user.Role)
+	var passwordHash *string
+	err := row.Scan(&user.ID, &user.Email, &user.DisplayName, &user.AvatarURL, &passwordHash, &user.Role)
 
 	if err != nil {
 		return User{}, err
 	}
+	// OAuth-only users have a NULL password_hash; an empty hash never matches a password.
+	if passwordHash != nil {
+		user.Password = *passwordHash
+	}
 
 	return user, nil
+}
+
+// CreateOAuth implements [Repository].
+func (r *dbRepository) CreateOAuth(ctx context.Context, params OAuthUserParams) (User, error) {
+	q := `
+		INSERT INTO users (email, display_name, avatar_url) VALUES ($1, $2, $3) RETURNING id, role
+	`
+
+	var userID uuid.UUID
+	var role Role
+	err := r.q.QueryRow(ctx, q, params.Email, params.DisplayName, params.AvatarURL).Scan(&userID, &role)
+	if err != nil {
+		return User{}, err
+	}
+
+	return User{
+		ID:          userID,
+		Email:       params.Email,
+		DisplayName: params.DisplayName,
+		AvatarURL:   params.AvatarURL,
+		Role:        role,
+	}, nil
 }
 
 func NewRepository(pool *pgxpool.Pool) Repository {

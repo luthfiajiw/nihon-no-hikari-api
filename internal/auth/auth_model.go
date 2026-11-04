@@ -20,6 +20,10 @@ type SignInRequest struct {
 	Password string `json:"password"`
 }
 
+type GoogleSignInRequest struct {
+	IDToken string `json:"id_token" validate:"required"`
+}
+
 type UserSession struct {
 	ID           uuid.UUID
 	UserID       uuid.UUID

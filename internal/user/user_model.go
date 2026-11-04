@@ -27,6 +27,12 @@ type UserParams struct {
 	ConfirmPassword string `json:"confirm_password"`
 }
 
+type OAuthUserParams struct {
+	DisplayName string
+	Email       string
+	AvatarURL   *string
+}
+
 type FindUserParam struct {
 	ID    uuid.UUID
 	Email string

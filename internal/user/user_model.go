@@ -100,6 +100,10 @@ type LinkGoogleRequest struct {
 	VerificationToken string `json:"verification_token" validate:"required"`
 }
 
+type UnlinkGoogleRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required"`
+}
+
 type EmailVerification struct {
 	ID             uuid.UUID  `json:"id"`
 	UserID         uuid.UUID  `json:"user_id"`

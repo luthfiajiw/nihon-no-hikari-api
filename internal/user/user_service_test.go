@@ -161,6 +161,19 @@ func (m *mockUserRepo) CreateIdentity(ctx context.Context, userID uuid.UUID, pro
 	return nil
 }
 
+func (m *mockUserRepo) DeleteIdentity(ctx context.Context, userID uuid.UUID, provider string) error {
+	if m.userIdent[userID] == nil {
+		return utils.ErrGoogleNotLinked
+	}
+	sub, ok := m.userIdent[userID][provider]
+	if !ok {
+		return utils.ErrGoogleNotLinked
+	}
+	delete(m.userIdent[userID], provider)
+	delete(m.identities, provider+":"+sub)
+	return nil
+}
+
 func (m *mockUserRepo) RevokeOtherSessions(ctx context.Context, userID uuid.UUID, currentSessionID uuid.UUID) error {
 	kept := make([]ProfileSessionSummary, 0)
 	for _, s := range m.sessions[userID] {
@@ -548,5 +561,74 @@ func TestUserService_RevokeOtherSessions(t *testing.T) {
 	}
 	if len(repo.sessions[userID]) != 1 || repo.sessions[userID][0].ID != currentSessionID {
 		t.Errorf("expected only current session to remain, got %v", repo.sessions[userID])
+	}
+}
+
+func TestUserService_UnlinkGoogle(t *testing.T) {
+	repo := newMockUserRepo()
+	svc := NewService(nil, repo, nil, nil)
+
+	// 1. OAuth-only user (no password set)
+	oauthUserID := uuid.New()
+	repo.users[oauthUserID] = User{ID: oauthUserID, Email: "oauth@example.com", DisplayName: "OAuth User", Role: RoleUser}
+	_ = repo.CreateIdentity(context.Background(), oauthUserID, "google", "sub-oauth", "oauth@example.com")
+
+	err := svc.UnlinkGoogle(context.Background(), oauthUserID, UnlinkGoogleRequest{CurrentPassword: "anypassword"})
+	if !errors.Is(err, utils.ErrCannotUnlinkWithoutPassword) {
+		t.Fatalf("expected ErrCannotUnlinkWithoutPassword, got %v", err)
+	}
+
+	// 2. User with password
+	userID := uuid.New()
+	pwdHash, _ := utils.HashPassword("correctpassword123")
+	repo.users[userID] = User{ID: userID, Email: "user@example.com", DisplayName: "Regular User", Role: RoleUser}
+	repo.passwordHash[userID] = pwdHash
+
+	// 2a. User has password, but Google is not linked yet
+	err = svc.UnlinkGoogle(context.Background(), userID, UnlinkGoogleRequest{CurrentPassword: "correctpassword123"})
+	if !errors.Is(err, utils.ErrGoogleNotLinked) {
+		t.Fatalf("expected ErrGoogleNotLinked, got %v", err)
+	}
+
+	// Link Google to userID
+	_ = repo.CreateIdentity(context.Background(), userID, "google", "sub-12345", "user@example.com")
+
+	// 2b. Empty current password
+	err = svc.UnlinkGoogle(context.Background(), userID, UnlinkGoogleRequest{CurrentPassword: ""})
+	if !errors.Is(err, utils.ErrCurrentPasswordRequired) {
+		t.Fatalf("expected ErrCurrentPasswordRequired, got %v", err)
+	}
+
+	// 2c. Incorrect current password
+	err = svc.UnlinkGoogle(context.Background(), userID, UnlinkGoogleRequest{CurrentPassword: "wrongpassword"})
+	if !errors.Is(err, utils.ErrCurrentPasswordIncorrect) {
+		t.Fatalf("expected ErrCurrentPasswordIncorrect, got %v", err)
+	}
+
+	// 2d. Successful unlinking
+	err = svc.UnlinkGoogle(context.Background(), userID, UnlinkGoogleRequest{CurrentPassword: "correctpassword123"})
+	if err != nil {
+		t.Fatalf("unexpected unlinking error: %v", err)
+	}
+
+	// Verify profile reflects GoogleLinked == false
+	profile, err := svc.GetProfile(context.Background(), userID, uuid.Nil)
+	if err != nil {
+		t.Fatalf("unexpected GetProfile error: %v", err)
+	}
+	if profile.GoogleLinked {
+		t.Fatalf("expected GoogleLinked to be false after unlinking")
+	}
+
+	// Verify identity lookup returns ErrUserNotFound
+	foundID, err := repo.FindIdentityUserID(context.Background(), "google", "sub-12345")
+	if !errors.Is(err, utils.ErrUserNotFound) || foundID != uuid.Nil {
+		t.Fatalf("expected ErrUserNotFound for unlinked sub, got id=%v err=%v", foundID, err)
+	}
+
+	// 2e. Subsequent duplicate unlink attempt returns ErrGoogleNotLinked
+	err = svc.UnlinkGoogle(context.Background(), userID, UnlinkGoogleRequest{CurrentPassword: "correctpassword123"})
+	if !errors.Is(err, utils.ErrGoogleNotLinked) {
+		t.Fatalf("expected ErrGoogleNotLinked on duplicate unlink, got %v", err)
 	}
 }

@@ -52,6 +52,7 @@ func (r *fakeAuthRepo) CreateIdentity(_ context.Context, userID uuid.UUID, provi
 }
 
 type fakeUserRepo struct {
+	user.Repository
 	users []user.User
 }
 
@@ -152,22 +153,25 @@ func TestGoogleSignInCreatesNewUserAndIdentity(t *testing.T) {
 	}
 }
 
-func TestGoogleSignInLinksExistingEmail(t *testing.T) {
+func TestGoogleSignInRejectsUnlinkedExistingEmail(t *testing.T) {
 	existing := user.User{ID: uuid.New(), Email: "a@example.com", DisplayName: "Old", Password: "hash", Role: user.RoleAdmin}
 	c := goodClaims()
 	svc, authRepo, userRepo := newGoogleTestService(fakeVerifier{claims: c}, existing)
 	res, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "token"}, "ua", "ip")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !errors.Is(err, utils.ErrGoogleAccountNotLinked) {
+		t.Fatalf("expected ErrGoogleAccountNotLinked, got %v", err)
+	}
+	if res != nil {
+		t.Fatalf("expected nil response, got %+v", res)
 	}
 	if len(userRepo.users) != 1 {
 		t.Fatalf("should not create duplicate user, users=%+v", userRepo.users)
 	}
-	if res.Data.ID != existing.ID || res.Data.Role != user.RoleAdmin {
-		t.Fatalf("expected existing user returned, got %+v", res.Data)
+	if len(authRepo.identities) != 0 {
+		t.Fatalf("expected 0 identities, got %+v", authRepo.identities)
 	}
-	if authRepo.identities["google:sub-1"] != existing.ID {
-		t.Fatalf("expected identity linked to existing user, got %+v", authRepo.identities)
+	if len(authRepo.sessions) != 0 {
+		t.Fatalf("expected 0 sessions, got %d", len(authRepo.sessions))
 	}
 }
 

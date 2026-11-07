@@ -37,6 +37,7 @@ type Service interface {
 	RequestLinkGoogleCode(ctx context.Context, userID uuid.UUID) error
 	VerifyLinkGoogleCode(ctx context.Context, userID uuid.UUID, req VerifyLinkGoogleCodeRequest) (string, error)
 	LinkGoogle(ctx context.Context, userID uuid.UUID, req LinkGoogleRequest) error
+	UnlinkGoogle(ctx context.Context, userID uuid.UUID, req UnlinkGoogleRequest) error
 	RevokeOtherSessions(ctx context.Context, userID uuid.UUID, currentSessionID uuid.UUID) error
 }
 
@@ -288,6 +289,44 @@ func (s *service) LinkGoogle(ctx context.Context, userID uuid.UUID, req LinkGoog
 		})
 	}
 	return linkOp(s.repo)
+}
+
+func (s *service) UnlinkGoogle(ctx context.Context, userID uuid.UUID, req UnlinkGoogleRequest) error {
+	user, err := s.repo.FindBy(ctx, FindUserParam{ID: userID})
+	if err != nil {
+		return err
+	}
+
+	if user.Password == "" {
+		return utils.ErrCannotUnlinkWithoutPassword
+	}
+
+	if req.CurrentPassword == "" {
+		return utils.ErrCurrentPasswordRequired
+	}
+
+	if !utils.CheckPasswordMatch(req.CurrentPassword, user.Password) {
+		return utils.ErrCurrentPasswordIncorrect
+	}
+
+	alreadyLinked, err := s.repo.HasIdentity(ctx, userID, "google")
+	if err != nil {
+		return err
+	}
+	if !alreadyLinked {
+		return utils.ErrGoogleNotLinked
+	}
+
+	unlinkOp := func(r Repository) error {
+		return r.DeleteIdentity(ctx, userID, "google")
+	}
+
+	if s.tx != nil {
+		return s.tx.Exec(ctx, func(tx pgx.Tx) error {
+			return unlinkOp(s.repo.UseTx(tx))
+		})
+	}
+	return unlinkOp(s.repo)
 }
 
 func (s *service) RevokeOtherSessions(ctx context.Context, userID uuid.UUID, currentSessionID uuid.UUID) error {

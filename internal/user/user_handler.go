@@ -42,6 +42,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	userGroup.Post("/link-google/request-code", h.requestLinkGoogleCode)
 	userGroup.Post("/link-google/verify-code", h.verifyLinkGoogleCode)
 	userGroup.Post("/link-google", h.linkGoogle)
+	userGroup.Post("/unlink-google", h.unlinkGoogle)
 	userGroup.Delete("/sessions/other", h.revokeOtherSessions)
 
 	// Admin user endpoints
@@ -266,6 +267,48 @@ func (h *Handler) linkGoogle(c fiber.Ctx) error {
 	}
 
 	return c.JSON(utils.SuccessRes{Success: true, Message: "akun Google berhasil ditautkan"})
+}
+
+// unlinkGoogle godoc
+// @Summary Putuskan tautan akun Google
+// @Description Memutuskan tautan akun Google dari akun pengguna saat ini menggunakan kata sandi saat ini.
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body UnlinkGoogleRequest true "Kata sandi saat ini"
+// @Success 200 {object} utils.SuccessRes
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /user/unlink-google [post]
+func (h *Handler) unlinkGoogle(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	var req UnlinkGoogleRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "format data tidak valid"})
+	}
+
+	if err := h.service.UnlinkGoogle(c.Context(), userID, req); err != nil {
+		switch {
+		case errors.Is(err, utils.ErrUserNotFound):
+			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrCannotUnlinkWithoutPassword),
+			errors.Is(err, utils.ErrCurrentPasswordRequired),
+			errors.Is(err, utils.ErrCurrentPasswordIncorrect),
+			errors.Is(err, utils.ErrGoogleNotLinked):
+			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal memutuskan tautan akun Google"})
+		}
+	}
+
+	return c.JSON(utils.SuccessRes{Success: true, Message: "tautan akun Google berhasil diputuskan"})
 }
 
 // revokeOtherSessions godoc

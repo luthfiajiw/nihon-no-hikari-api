@@ -24,6 +24,7 @@ type Repository interface {
 	HasIdentity(ctx context.Context, userID uuid.UUID, provider string) (bool, error)
 	FindIdentityUserID(ctx context.Context, provider string, sub string) (uuid.UUID, error)
 	CreateIdentity(ctx context.Context, userID uuid.UUID, provider string, sub string, email string) error
+	DeleteIdentity(ctx context.Context, userID uuid.UUID, provider string) error
 	RevokeOtherSessions(ctx context.Context, userID uuid.UUID, currentSessionID uuid.UUID) error
 	CreateEmailVerification(ctx context.Context, userID uuid.UUID, purpose string, codeHash string, expiresAt time.Time) (uuid.UUID, error)
 	LatestEmailVerification(ctx context.Context, userID uuid.UUID, purpose string) (*EmailVerification, error)
@@ -263,6 +264,20 @@ func (r *dbRepository) CreateIdentity(ctx context.Context, userID uuid.UUID, pro
 		INSERT INTO user_identities (user_id, provider, provider_sub, email) VALUES ($1,$2,$3,$4)
 	`, userID, provider, sub, email)
 	return err
+}
+
+// DeleteIdentity implements [Repository].
+func (r *dbRepository) DeleteIdentity(ctx context.Context, userID uuid.UUID, provider string) error {
+	cmdTag, err := r.q.Exec(ctx, `
+		DELETE FROM user_identities WHERE user_id = $1 AND provider = $2
+	`, userID, provider)
+	if err != nil {
+		return err
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return utils.ErrGoogleNotLinked
+	}
+	return nil
 }
 
 // RevokeOtherSessions implements [Repository].

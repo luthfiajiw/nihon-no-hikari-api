@@ -167,6 +167,8 @@ func (h *Handler) google(c fiber.Ctx) error {
 		switch {
 		case errors.Is(err, utils.ErrInvalidGoogleToken), errors.Is(err, utils.ErrGoogleEmailNotVerified):
 			status = fiber.StatusUnauthorized
+		case errors.Is(err, utils.ErrGoogleAccountNotLinked):
+			status = fiber.StatusConflict
 		case errors.Is(err, utils.ErrGoogleSignInDisabled):
 			status = fiber.StatusServiceUnavailable
 		}

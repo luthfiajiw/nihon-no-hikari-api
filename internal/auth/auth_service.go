@@ -158,28 +158,30 @@ func (s *service) GoogleSignIn(ctx context.Context, req GoogleSignInRequest, use
 			return err
 		}
 
-		// First Google login: link to a user with the same verified email, else create one.
-		userDetail, err = userRepo.FindBy(ctx, user.FindUserParam{Email: claims.Email})
+		// Existing account with the same email must link Google explicitly from Profile Settings.
+		_, err = userRepo.FindBy(ctx, user.FindUserParam{Email: claims.Email})
+		if err == nil {
+			return utils.ErrGoogleAccountNotLinked
+		}
+		if !errors.Is(err, utils.ErrUserNotFound) && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+
+		var avatar *string
+		if claims.Picture != "" {
+			avatar = &claims.Picture
+		}
+		displayName := claims.Name
+		if displayName == "" {
+			displayName = claims.Email
+		}
+		userDetail, err = userRepo.CreateOAuth(ctx, user.OAuthUserParams{
+			DisplayName: displayName,
+			Email:       claims.Email,
+			AvatarURL:   avatar,
+		})
 		if err != nil {
-			if !errors.Is(err, utils.ErrUserNotFound) && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			var avatar *string
-			if claims.Picture != "" {
-				avatar = &claims.Picture
-			}
-			displayName := claims.Name
-			if displayName == "" {
-				displayName = claims.Email
-			}
-			userDetail, err = userRepo.CreateOAuth(ctx, user.OAuthUserParams{
-				DisplayName: displayName,
-				Email:       claims.Email,
-				AvatarURL:   avatar,
-			})
-			if err != nil {
-				return err
-			}
+			return err
 		}
 
 		return authRepo.CreateIdentity(ctx, userDetail.ID, googleProvider, claims.Sub, claims.Email)

@@ -1,7 +1,8 @@
 package utils
 
 const (
-	PayloadKey  = "payload"
-	UserIDKey   = "userId"
-	UserRoleKey = "userRole"
+	PayloadKey   = "payload"
+	UserIDKey    = "userId"
+	UserRoleKey  = "userRole"
+	SessionIDKey = "sessionId"
 )

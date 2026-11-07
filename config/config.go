@@ -21,6 +21,11 @@ type Config struct {
 	SupabaseServiceKey   string        `envconfig:"SUPABASE_SERVICE_ROLE_KEY"`
 	KotobaCoverBucket    string        `envconfig:"SUPABASE_KOTOBA_COVER_BUCKET" default:"kotoba-covers"`
 	KotobaAudioBucket    string        `envconfig:"SUPABASE_KOTOBA_AUDIO_BUCKET" default:"kotoba-audio"`
+	SMTPHost             string        `envconfig:"SMTP_HOST"`
+	SMTPPort             string        `envconfig:"SMTP_PORT" default:"587"`
+	SMTPUsername         string        `envconfig:"SMTP_USER"`
+	SMTPPassword         string        `envconfig:"SMTP_PASS"`
+	SMTPFrom             string        `envconfig:"SMTP_FROM"`
 }
 
 func LoadConfig() (*Config, error) {

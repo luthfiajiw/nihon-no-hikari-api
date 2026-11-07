@@ -14,6 +14,7 @@ import (
 
 type Handler struct {
 	pool       *pgxpool.Pool
+	service    Service
 	middleware middleware.Middleware
 }
 
@@ -24,14 +25,271 @@ type Summary struct {
 	Role        Role      `json:"role"`
 }
 
-func NewHandler(pool *pgxpool.Pool, authMiddleware middleware.Middleware) *Handler {
-	return &Handler{pool: pool, middleware: authMiddleware}
+func NewHandler(pool *pgxpool.Pool, service Service, authMiddleware middleware.Middleware) *Handler {
+	return &Handler{
+		pool:       pool,
+		service:    service,
+		middleware: authMiddleware,
+	}
 }
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
-	group := app.Group("/api/v1/admin/users", h.middleware.AuthMiddleware(), h.middleware.RequireRole(string(RoleAdmin)))
-	group.Get("", h.list)
-	group.Patch("/:userId/role", h.changeRole)
+	// Regular user profile endpoints
+	userGroup := app.Group("/api/v1/user", h.middleware.AuthMiddleware())
+	userGroup.Get("/profile", h.getProfile)
+	userGroup.Patch("/profile", h.updateProfile)
+	userGroup.Post("/password", h.changePassword)
+	userGroup.Post("/link-google/request-code", h.requestLinkGoogleCode)
+	userGroup.Post("/link-google/verify-code", h.verifyLinkGoogleCode)
+	userGroup.Post("/link-google", h.linkGoogle)
+	userGroup.Delete("/sessions/other", h.revokeOtherSessions)
+
+	// Admin user endpoints
+	adminGroup := app.Group("/api/v1/admin/users", h.middleware.AuthMiddleware(), h.middleware.RequireRole(string(RoleAdmin)))
+	adminGroup.Get("", h.list)
+	adminGroup.Patch("/:userId/role", h.changeRole)
+}
+
+func getUserID(c fiber.Ctx) (uuid.UUID, error) {
+	val := c.Locals(utils.UserIDKey)
+	id, ok := val.(uuid.UUID)
+	if !ok || id == uuid.Nil {
+		return uuid.Nil, errors.New("pengguna tidak terautentikasi")
+	}
+	return id, nil
+}
+
+func getSessionID(c fiber.Ctx) uuid.UUID {
+	val := c.Locals(utils.SessionIDKey)
+	id, ok := val.(uuid.UUID)
+	if !ok {
+		return uuid.Nil
+	}
+	return id
+}
+
+// getProfile godoc
+// @Summary Profil pengguna saat ini
+// @Description Mengambil data profil diri, status kata sandi, akun Google tertaut, dan daftar sesi aktif.
+// @Tags User Profile
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} ProfileResponse
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /user/profile [get]
+func (h *Handler) getProfile(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	sessionID := getSessionID(c)
+	data, err := h.service.GetProfile(c.Context(), userID, sessionID)
+	if err != nil {
+		if errors.Is(err, utils.ErrUserNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal mengambil data profil"})
+	}
+
+	return c.JSON(fiber.Map{"success": true, "data": data})
+}
+
+// updateProfile godoc
+// @Summary Perbarui profil diri
+// @Description Mengubah nama tampilan dan/atau avatar profil.
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body UpdateProfileRequest true "Data pembaruan profil"
+// @Success 200 {object} UpdateProfileResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /user/profile [patch]
+func (h *Handler) updateProfile(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	var req UpdateProfileRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "format data tidak valid"})
+	}
+
+	updated, err := h.service.UpdateProfile(c.Context(), userID, req)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"success": true, "data": updated})
+}
+
+// changePassword godoc
+// @Summary Ubah atau atur kata sandi
+// @Description Memperbarui kata sandi pengguna atau membuat kata sandi pertama kali bagi pengguna OAuth.
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body ChangePasswordRequest true "Data perubahan kata sandi"
+// @Success 200 {object} utils.SuccessRes
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /user/password [post]
+func (h *Handler) changePassword(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	var req ChangePasswordRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "format data tidak valid"})
+	}
+
+	if err := h.service.ChangePassword(c.Context(), userID, req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	return c.JSON(utils.SuccessRes{Success: true, Message: "kata sandi berhasil diperbarui"})
+}
+
+// requestLinkGoogleCode godoc
+// @Summary Minta kode verifikasi tautan Google
+// @Description Mengirimkan kode 6-digit OTP ke email akun untuk verifikasi tautan akun Google.
+// @Tags User Profile
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.SuccessRes
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 429 {object} utils.ErrorRes
+// @Failure 503 {object} utils.ErrorRes
+// @Router /user/link-google/request-code [post]
+func (h *Handler) requestLinkGoogleCode(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	if err := h.service.RequestLinkGoogleCode(c.Context(), userID); err != nil {
+		switch {
+		case errors.Is(err, utils.ErrVerificationRateLimited):
+			return c.Status(fiber.StatusTooManyRequests).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrMailerDisabled):
+			return c.Status(fiber.StatusServiceUnavailable).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrGoogleAlreadyLinked):
+			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		}
+	}
+
+	return c.JSON(utils.SuccessRes{Success: true, Message: "kode verifikasi berhasil dikirim ke email Anda"})
+}
+
+// verifyLinkGoogleCode godoc
+// @Summary Verifikasi kode OTP tautan Google
+// @Description Memverifikasi kode 6-digit OTP dan menghasilkan verification_token untuk penautan Google.
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body VerifyLinkGoogleCodeRequest true "Kode OTP 6-digit"
+// @Success 200 {object} VerifyLinkGoogleCodeResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 429 {object} utils.ErrorRes
+// @Router /user/link-google/verify-code [post]
+func (h *Handler) verifyLinkGoogleCode(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	var req VerifyLinkGoogleCodeRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "format data tidak valid"})
+	}
+
+	token, err := h.service.VerifyLinkGoogleCode(c.Context(), userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, utils.ErrVerificationAttemptsExceeded):
+			return c.Status(fiber.StatusTooManyRequests).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrInvalidVerificationCode):
+			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		default:
+			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		}
+	}
+
+	return c.JSON(VerifyLinkGoogleCodeResponse{
+		Success: true,
+		Data: VerifyLinkGoogleCodeData{
+			VerificationToken: token,
+		},
+	})
+}
+
+// linkGoogle godoc
+// @Summary Hubungkan akun Google
+// @Description Menautkan akun Google ke akun pengguna saat ini menggunakan Google ID token dan token verifikasi email.
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body LinkGoogleRequest true "Google ID Token dan Verification Token"
+// @Success 200 {object} utils.SuccessRes
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /user/link-google [post]
+func (h *Handler) linkGoogle(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	var req LinkGoogleRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: "format data tidak valid"})
+	}
+
+	if err := h.service.LinkGoogle(c.Context(), userID, req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	return c.JSON(utils.SuccessRes{Success: true, Message: "akun Google berhasil ditautkan"})
+}
+
+// revokeOtherSessions godoc
+// @Summary Cabut seluruh sesi lain
+// @Description Menutup seluruh sesi masuk aktif pada perangkat lain milik pengguna selain sesi saat ini.
+// @Tags User Profile
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.SuccessRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /user/sessions/other [delete]
+func (h *Handler) revokeOtherSessions(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+	}
+
+	sessionID := getSessionID(c)
+	if err := h.service.RevokeOtherSessions(c.Context(), userID, sessionID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal mencabut sesi lain"})
+	}
+
+	return c.JSON(utils.SuccessRes{Success: true, Message: "seluruh sesi lain berhasil dicabut"})
 }
 
 // list godoc

@@ -12,6 +12,7 @@ import (
 	"nihon-no-hikari-api/internal/speech"
 	"nihon-no-hikari-api/internal/user"
 	"nihon-no-hikari-api/pkg/db"
+	"nihon-no-hikari-api/pkg/mailer"
 	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/supabasestorage"
 	"nihon-no-hikari-api/pkg/utils"
@@ -61,7 +62,20 @@ func main() {
 	kotobaRepo := kotoba.NewRepository(pool)
 
 	// SERVICES
-	authService := auth.NewService(tx, cfg, authRepo, userRepo, auth.NewGoogleVerifier(cfg.GoogleClientID))
+	googleVerifier := auth.NewGoogleVerifier(cfg.GoogleClientID)
+	authService := auth.NewService(tx, cfg, authRepo, userRepo, googleVerifier)
+	userGoogleVerifier := user.GoogleVerifierFunc(func(ctx context.Context, idToken string) (string, string, bool, error) {
+		claims, err := googleVerifier.Verify(ctx, idToken)
+		return claims.Sub, claims.Email, claims.EmailVerified, err
+	})
+	smtpMailer := mailer.NewSMTPMailer(mailer.SMTPConfig{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		From:     cfg.SMTPFrom,
+	})
+	userService := user.NewService(tx, userRepo, userGoogleVerifier, smtpMailer)
 	courseService := course.NewService(tx, courseRepo, questionRepo)
 	questionService := question.NewService(tx, questionRepo)
 	storage := supabasestorage.New(cfg.SupabaseURL, cfg.SupabaseServiceKey, nil)
@@ -77,7 +91,7 @@ func main() {
 	authHandler := auth.NewHandler(authService, bodyValidator, authMiddleware)
 	courseHandler := course.NewHandler(courseService, authMiddleware)
 	questionHandler := question.NewHandler(questionService, authMiddleware)
-	userHandler := user.NewHandler(pool, authMiddleware)
+	userHandler := user.NewHandler(pool, userService, authMiddleware)
 	speechHandler := speech.NewHandler(cfg, courseRepo, authMiddleware)
 	kotobaHandler := kotoba.NewHandler(kotobaService, authMiddleware)
 

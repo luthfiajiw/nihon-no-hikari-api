@@ -66,6 +66,7 @@ func (m *middleware) AuthMiddleware() fiber.Handler {
 
 		c.Locals(utils.UserIDKey, payload.UserID)
 		c.Locals(utils.UserRoleKey, role)
+		c.Locals(utils.SessionIDKey, payload.ID)
 
 		return c.Next()
 	}

@@ -72,6 +72,27 @@ func (r *fakeUserRepo) CreateOAuth(_ context.Context, p user.OAuthUserParams) (u
 	r.users = append(r.users, u)
 	return u, nil
 }
+func (r *fakeUserRepo) GetProfile(context.Context, uuid.UUID, uuid.UUID) (user.ProfileData, error) {
+	return user.ProfileData{}, errors.New("unused")
+}
+func (r *fakeUserRepo) UpdateProfile(context.Context, uuid.UUID, string, *string) (user.User, error) {
+	return user.User{}, errors.New("unused")
+}
+func (r *fakeUserRepo) UpdatePassword(context.Context, uuid.UUID, string) error {
+	return errors.New("unused")
+}
+func (r *fakeUserRepo) HasIdentity(context.Context, uuid.UUID, string) (bool, error) {
+	return false, errors.New("unused")
+}
+func (r *fakeUserRepo) FindIdentityUserID(context.Context, string, string) (uuid.UUID, error) {
+	return uuid.Nil, errors.New("unused")
+}
+func (r *fakeUserRepo) CreateIdentity(context.Context, uuid.UUID, string, string, string) error {
+	return errors.New("unused")
+}
+func (r *fakeUserRepo) RevokeOtherSessions(context.Context, uuid.UUID, uuid.UUID) error {
+	return errors.New("unused")
+}
 
 func newGoogleTestService(v GoogleVerifier, users ...user.User) (Service, *fakeAuthRepo, *fakeUserRepo) {
 	cfg := &config.Config{
@@ -91,7 +112,7 @@ func goodClaims() GoogleClaims {
 
 func TestGoogleSignInRejectsInvalidToken(t *testing.T) {
 	svc, _, _ := newGoogleTestService(fakeVerifier{err: utils.ErrInvalidGoogleToken})
-	_, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "x"}, "ua", "1.1.1.1")
+	_, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "bad"}, "ua", "ip")
 	if !errors.Is(err, utils.ErrInvalidGoogleToken) {
 		t.Fatalf("expected ErrInvalidGoogleToken, got %v", err)
 	}
@@ -101,7 +122,7 @@ func TestGoogleSignInRejectsUnverifiedEmail(t *testing.T) {
 	c := goodClaims()
 	c.EmailVerified = false
 	svc, _, userRepo := newGoogleTestService(fakeVerifier{claims: c})
-	_, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "x"}, "ua", "ip")
+	_, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "token"}, "ua", "ip")
 	if !errors.Is(err, utils.ErrGoogleEmailNotVerified) {
 		t.Fatalf("expected ErrGoogleEmailNotVerified, got %v", err)
 	}
@@ -111,52 +132,58 @@ func TestGoogleSignInRejectsUnverifiedEmail(t *testing.T) {
 }
 
 func TestGoogleSignInCreatesNewUserAndIdentity(t *testing.T) {
-	svc, authRepo, userRepo := newGoogleTestService(fakeVerifier{claims: goodClaims()})
-	res, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "x"}, "ua", "ip")
+	c := goodClaims()
+	svc, authRepo, userRepo := newGoogleTestService(fakeVerifier{claims: c})
+	res, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "token"}, "ua", "ip")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(userRepo.users) != 1 || res.Data.Email != "a@example.com" || res.Data.Role != user.RoleUser {
-		t.Fatalf("unexpected result: %+v users=%d", res.Data, len(userRepo.users))
+		t.Fatalf("unexpected created user: %+v", userRepo.users)
 	}
-	if res.Data.AvatarURL == nil || *res.Data.AvatarURL != "http://p/x.png" {
-		t.Fatal("avatar should come from Google")
+	if userRepo.users[0].DisplayName != "Aya" || userRepo.users[0].AvatarURL == nil || *userRepo.users[0].AvatarURL != "http://p/x.png" {
+		t.Fatalf("unexpected profile values: %+v", userRepo.users[0])
 	}
-	if _, ok := authRepo.identities["google:sub-1"]; !ok || len(authRepo.sessions) != 1 {
-		t.Fatal("identity and session should be created")
+	if authRepo.identities["google:sub-1"] != res.Data.ID {
+		t.Fatalf("identity not recorded: %+v", authRepo.identities)
 	}
-	if res.Data.Session.AccessToken == "" || res.Data.Session.RefreshToken == "" {
-		t.Fatal("tokens should be issued")
+	if len(authRepo.sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(authRepo.sessions))
 	}
 }
 
 func TestGoogleSignInLinksExistingEmail(t *testing.T) {
 	existing := user.User{ID: uuid.New(), Email: "a@example.com", DisplayName: "Old", Password: "hash", Role: user.RoleAdmin}
-	svc, authRepo, userRepo := newGoogleTestService(fakeVerifier{claims: goodClaims()}, existing)
-	res, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "x"}, "ua", "ip")
+	c := goodClaims()
+	svc, authRepo, userRepo := newGoogleTestService(fakeVerifier{claims: c}, existing)
+	res, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "token"}, "ua", "ip")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(userRepo.users) != 1 || res.Data.ID != existing.ID || res.Data.Role != user.RoleAdmin {
-		t.Fatal("should sign into the existing account")
+	if len(userRepo.users) != 1 {
+		t.Fatalf("should not create duplicate user, users=%+v", userRepo.users)
+	}
+	if res.Data.ID != existing.ID || res.Data.Role != user.RoleAdmin {
+		t.Fatalf("expected existing user returned, got %+v", res.Data)
 	}
 	if authRepo.identities["google:sub-1"] != existing.ID {
-		t.Fatal("identity should be linked to the existing user")
+		t.Fatalf("expected identity linked to existing user, got %+v", authRepo.identities)
 	}
 }
 
 func TestGoogleSignInSecondLoginMatchesBySub(t *testing.T) {
-	svc, authRepo, userRepo := newGoogleTestService(fakeVerifier{claims: goodClaims()})
-	first, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "x"}, "ua", "ip")
+	existing := user.User{ID: uuid.New(), Email: "old@example.com", DisplayName: "Existing", Role: user.RoleUser}
+	c := goodClaims()
+	c.Email = "new-email@example.com"
+	svc, authRepo, _ := newGoogleTestService(fakeVerifier{claims: c}, existing)
+	authRepo.identities["google:sub-1"] = existing.ID
+
+	res, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "token"}, "ua", "ip")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	second, err := svc.GoogleSignIn(context.Background(), GoogleSignInRequest{IDToken: "x"}, "ua", "ip")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.Data.ID != second.Data.ID || len(userRepo.users) != 1 || len(authRepo.sessions) != 2 {
-		t.Fatal("second login must reuse the same user and create a new session")
+	if res.Data.ID != existing.ID {
+		t.Fatalf("expected sub lookup to find existing user, got %+v", res.Data)
 	}
 }
 

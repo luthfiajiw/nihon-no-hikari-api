@@ -32,6 +32,14 @@ func inputMessage(message string) error {
 	return &applicationError{kind: ErrInvalidInput, message: message}
 }
 
+func notFoundMessage(message string) error {
+	return &applicationError{kind: ErrNotFound, message: message}
+}
+
+func conflictMessage(message string) error {
+	return &applicationError{kind: ErrConflict, message: message}
+}
+
 // Moving request types into model must not change existing JSON error messages.
 func decodeError(err error) error {
 	var mismatch *json.UnmarshalTypeError

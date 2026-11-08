@@ -14,6 +14,7 @@ func TestHandlerInputContracts(t *testing.T) {
 	h := &Handler{service: NewService(nil, nil, nil)}
 	app := fiber.New()
 	app.Get("/catalog", h.catalog)
+	app.Patch("/levels/:id", h.updateLevelPrice)
 	h.registerAdminContent(app, "/courses", "course")
 	h.registerAdminContent(app, "/modules", "module")
 	h.registerAdminContent(app, "/lessons", "lesson")
@@ -30,6 +31,12 @@ func TestHandlerInputContracts(t *testing.T) {
 		{"POST", "/courses/bad/restore", "", "ID tidak valid"},
 		{"POST", "/preview", `{`, "konten tidak valid"},
 		{"POST", "/preview", `{"content":[]}`, "konten lesson harus berupa objek dengan content dan tips"},
+		{"PATCH", "/levels/bad", `{}`, "ID tidak valid"},
+		{"PATCH", "/levels/00000000-0000-0000-0000-000000000000", `{`, "harga level tidak valid"},
+		{"PATCH", "/levels/00000000-0000-0000-0000-000000000000", `{"price":"bad"}`, "harga level tidak valid"},
+		{"PATCH", "/levels/00000000-0000-0000-0000-000000000000", `{}`, "harga level harus antara 0 dan 100000000"},
+		{"PATCH", "/levels/00000000-0000-0000-0000-000000000000", `{"price":-1}`, "harga level harus antara 0 dan 100000000"},
+		{"PATCH", "/levels/00000000-0000-0000-0000-000000000000", `{"price":100000001}`, "harga level harus antara 0 dan 100000000"},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))

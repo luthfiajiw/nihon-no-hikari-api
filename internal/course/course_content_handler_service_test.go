@@ -19,8 +19,12 @@ import (
 
 type contentHandlerServiceStub struct {
 	Service
-	list   func(context.Context, string) (model.ContentListResponse, error)
-	create func(context.Context, string, model.CoreInput) (model.CreateResponse, error)
+	list        func(context.Context, string) (model.ContentListResponse, error)
+	create      func(context.Context, string, model.CoreInput) (model.CreateResponse, error)
+	levelDetail func(context.Context, uuid.UUID) (model.LevelResponse, error)
+	createLevel func(context.Context, model.LevelInput) (model.LevelResponse, error)
+	updateLevel func(context.Context, uuid.UUID, model.LevelInput) (model.LevelResponse, error)
+	deleteLevel func(context.Context, uuid.UUID) (model.StatusResponse, error)
 }
 
 func (s *contentHandlerServiceStub) ListAdminContent(c context.Context, k string) (model.ContentListResponse, error) {
@@ -29,6 +33,34 @@ func (s *contentHandlerServiceStub) ListAdminContent(c context.Context, k string
 
 func (s *contentHandlerServiceStub) CreateAdminContent(c context.Context, k string, v model.CoreInput) (model.CreateResponse, error) {
 	return s.create(c, k, v)
+}
+
+func (s *contentHandlerServiceStub) AdminLevelDetail(c context.Context, id uuid.UUID) (model.LevelResponse, error) {
+	if s.levelDetail != nil {
+		return s.levelDetail(c, id)
+	}
+	return model.LevelResponse{}, nil
+}
+
+func (s *contentHandlerServiceStub) CreateAdminLevel(c context.Context, in model.LevelInput) (model.LevelResponse, error) {
+	if s.createLevel != nil {
+		return s.createLevel(c, in)
+	}
+	return model.LevelResponse{}, nil
+}
+
+func (s *contentHandlerServiceStub) UpdateAdminLevel(c context.Context, id uuid.UUID, in model.LevelInput) (model.LevelResponse, error) {
+	if s.updateLevel != nil {
+		return s.updateLevel(c, id, in)
+	}
+	return model.LevelResponse{}, nil
+}
+
+func (s *contentHandlerServiceStub) DeleteAdminLevel(c context.Context, id uuid.UUID) (model.StatusResponse, error) {
+	if s.deleteLevel != nil {
+		return s.deleteLevel(c, id)
+	}
+	return model.StatusResponse{}, nil
 }
 
 func TestHandlerMapsServiceErrorsWithoutDatabase(t *testing.T) {
@@ -133,5 +165,71 @@ func TestResponseEnvelopesPreserveNullAndOmittedFields(t *testing.T) {
 		if err != nil || string(raw) != tc.want {
 			t.Fatalf("%s != %s (%v)", raw, tc.want, err)
 		}
+	}
+}
+
+func TestLevelHandlerEndpoints(t *testing.T) {
+	levelID := uuid.New()
+	stub := &contentHandlerServiceStub{
+		levelDetail: func(_ context.Context, id uuid.UUID) (model.LevelResponse, error) {
+			if id != levelID {
+				t.Fatalf("unexpected id %v", id)
+			}
+			return model.LevelResponse{Success: true, Data: model.Level{ID: id, Code: "N5", Name: "JLPT N5", Points: []string{"Point 1"}}}, nil
+		},
+		createLevel: func(_ context.Context, in model.LevelInput) (model.LevelResponse, error) {
+			if in.Code != "N5" {
+				t.Fatalf("unexpected code %s", in.Code)
+			}
+			return model.LevelResponse{Success: true, Data: model.Level{ID: levelID, Code: in.Code, Name: in.Name, Points: in.Points}}, nil
+		},
+		updateLevel: func(_ context.Context, id uuid.UUID, in model.LevelInput) (model.LevelResponse, error) {
+			if id != levelID || in.Code != "N5" {
+				t.Fatalf("unexpected update %v %+v", id, in)
+			}
+			return model.LevelResponse{Success: true, Data: model.Level{ID: id, Code: in.Code, Name: in.Name, Points: in.Points}}, nil
+		},
+		deleteLevel: func(_ context.Context, id uuid.UUID) (model.StatusResponse, error) {
+			if id != levelID {
+				t.Fatalf("unexpected delete id %v", id)
+			}
+			return model.StatusResponse{Success: true}, nil
+		},
+	}
+	h := NewHandler(stub, nil)
+	app := fiber.New()
+	app.Get("/levels/:id", h.levelDetail)
+	app.Post("/levels", h.createLevel)
+	app.Patch("/levels/:id", h.updateLevel)
+	app.Delete("/levels/:id", h.deleteLevel)
+
+	// GET detail
+	req := httptest.NewRequest("GET", "/levels/"+levelID.String(), nil)
+	res, err := app.Test(req)
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("detail failed %v %v", err, res.StatusCode)
+	}
+
+	// POST create
+	req = httptest.NewRequest("POST", "/levels", strings.NewReader(`{"code":"N5","name":"JLPT N5","points":["Point 1"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	res, err = app.Test(req)
+	if err != nil || res.StatusCode != 201 {
+		t.Fatalf("create failed %v %v", err, res.StatusCode)
+	}
+
+	// PATCH update full
+	req = httptest.NewRequest("PATCH", "/levels/"+levelID.String(), strings.NewReader(`{"code":"N5","name":"JLPT N5 Updated","points":["Point 1"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	res, err = app.Test(req)
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("update failed %v %v", err, res.StatusCode)
+	}
+
+	// DELETE
+	req = httptest.NewRequest("DELETE", "/levels/"+levelID.String(), nil)
+	res, err = app.Test(req)
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("delete failed %v %v", err, res.StatusCode)
 	}
 }

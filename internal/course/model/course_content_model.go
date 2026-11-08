@@ -206,14 +206,34 @@ type Level struct {
 	Name        string    `json:"name"`
 	Description *string   `json:"description"`
 	OrderIndex  int16     `json:"order_index"`
+	Price       int32     `json:"price" example:"149000"`
+	Points      []string  `json:"points"`
 	CreatedAt   string    `json:"created_at" format:"date-time"`
 	UpdatedAt   string    `json:"updated_at" format:"date-time"`
 } // @name internal_course.Level
+
+type LevelInput struct {
+	Code        string   `json:"code" example:"N5"`
+	Name        string   `json:"name" example:"JLPT N5"`
+	Description *string  `json:"description"`
+	OrderIndex  *int64   `json:"order_index" example:"0"`
+	Price       *int64   `json:"price" example:"149000"`
+	Points      []string `json:"points"`
+} // @name internal_course.LevelInput
 
 type LevelsResponse struct {
 	Success bool    `json:"success" example:"true"`
 	Data    []Level `json:"data"`
 } // @name internal_course.LevelsResponse
+
+type UpdateLevelPriceRequest struct {
+	Price *int64 `json:"price" example:"149000"`
+} // @name internal_course.UpdateLevelPriceRequest
+
+type LevelResponse struct {
+	Success bool  `json:"success" example:"true"`
+	Data    Level `json:"data"`
+} // @name internal_course.LevelResponse
 
 type ContentState struct {
 	Published bool

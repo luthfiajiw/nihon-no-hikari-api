@@ -1624,6 +1624,83 @@
                 }
             }
         },
+        "/admin/levels/{id}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memerlukan role Admin. Memperbarui harga level dalam satuan Rupiah (0 - 100000000).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Perbarui harga level",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID level",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Harga level",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.UpdateLevelPriceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.LevelResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/me": {
             "get": {
                 "security": [
@@ -3109,6 +3186,64 @@
                 }
             }
         },
+        "/auth/google": {
+            "post": {
+                "description": "Memverifikasi Google ID token, menautkan atau membuat akun, lalu membuat sesi baru.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Masuk dengan Google",
+                "parameters": [
+                    {
+                        "description": "Google ID token",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_auth.GoogleSignInRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_auth.SignInResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/register": {
             "post": {
                 "description": "Membuat akun pengguna baru.",
@@ -3899,6 +4034,32 @@
                 }
             }
         },
+        "/levels": {
+            "get": {
+                "description": "Mengambil seluruh level beserta harga dalam urutan order_index untuk publik tanpa autentikasi.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Courses"
+                ],
+                "summary": "Daftar level publik",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_course.LevelsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/question-sets": {
             "get": {
                 "security": [
@@ -4232,6 +4393,418 @@
                     }
                 }
             }
+        },
+        "/user/link-google": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menautkan akun Google ke akun pengguna saat ini menggunakan Google ID token dan token verifikasi email.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profile"
+                ],
+                "summary": "Hubungkan akun Google",
+                "parameters": [
+                    {
+                        "description": "Google ID Token dan Verification Token",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_user.LinkGoogleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/link-google/request-code": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengirimkan kode 6-digit OTP ke email akun untuk verifikasi tautan akun Google.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profile"
+                ],
+                "summary": "Minta kode verifikasi tautan Google",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/link-google/verify-code": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memverifikasi kode 6-digit OTP dan menghasilkan verification_token untuk penautan Google.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profile"
+                ],
+                "summary": "Verifikasi kode OTP tautan Google",
+                "parameters": [
+                    {
+                        "description": "Kode OTP 6-digit",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_user.VerifyLinkGoogleCodeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_user.VerifyLinkGoogleCodeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/password": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memperbarui kata sandi pengguna atau membuat kata sandi pertama kali bagi pengguna OAuth.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profile"
+                ],
+                "summary": "Ubah atau atur kata sandi",
+                "parameters": [
+                    {
+                        "description": "Data perubahan kata sandi",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_user.ChangePasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil data profil diri, status kata sandi, akun Google tertaut, dan daftar sesi aktif.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profile"
+                ],
+                "summary": "Profil pengguna saat ini",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_user.ProfileResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengubah nama tampilan dan/atau avatar profil.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profile"
+                ],
+                "summary": "Perbarui profil diri",
+                "parameters": [
+                    {
+                        "description": "Data pembaruan profil",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_user.UpdateProfileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_user.UpdateProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/sessions/other": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menutup seluruh sesi masuk aktif pada perangkat lain milik pengguna selain sesi saat ini.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profile"
+                ],
+                "summary": "Cabut seluruh sesi lain",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/unlink-google": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memutuskan tautan akun Google dari akun pengguna saat ini menggunakan kata sandi saat ini.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profile"
+                ],
+                "summary": "Putuskan tautan akun Google",
+                "parameters": [
+                    {
+                        "description": "Kata sandi saat ini",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_user.UnlinkGoogleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -4251,6 +4824,17 @@
                     "type": "string"
                 },
                 "refresh_token_expires_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_auth.GoogleSignInRequest": {
+            "type": "object",
+            "required": [
+                "id_token"
+            ],
+            "properties": {
+                "id_token": {
                     "type": "string"
                 }
             }
@@ -4583,9 +5167,25 @@
                 "order_index": {
                     "type": "integer"
                 },
+                "price": {
+                    "type": "integer",
+                    "example": 149000
+                },
                 "updated_at": {
                     "type": "string",
                     "format": "date-time"
+                }
+            }
+        },
+        "internal_course.LevelResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_course.Level"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -4667,6 +5267,15 @@
                 "success": {
                     "type": "boolean",
                     "example": true
+                }
+            }
+        },
+        "internal_course.UpdateLevelPriceRequest": {
+            "type": "object",
+            "properties": {
+                "price": {
+                    "type": "integer",
+                    "example": 149000
                 }
             }
         },
@@ -5869,6 +6478,25 @@
                 }
             }
         },
+        "internal_user.ChangePasswordRequest": {
+            "type": "object",
+            "required": [
+                "confirm_password",
+                "new_password"
+            ],
+            "properties": {
+                "confirm_password": {
+                    "type": "string"
+                },
+                "current_password": {
+                    "type": "string"
+                },
+                "new_password": {
+                    "type": "string",
+                    "minLength": 8
+                }
+            }
+        },
         "internal_user.ChangeRoleRequest": {
             "type": "object",
             "required": [
@@ -5901,6 +6529,21 @@
                 }
             }
         },
+        "internal_user.LinkGoogleRequest": {
+            "type": "object",
+            "required": [
+                "id_token",
+                "verification_token"
+            ],
+            "properties": {
+                "id_token": {
+                    "type": "string"
+                },
+                "verification_token": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_user.ListUsersResponse": {
             "type": "object",
             "properties": {
@@ -5913,6 +6556,76 @@
                 "success": {
                     "type": "boolean",
                     "example": true
+                }
+            }
+        },
+        "internal_user.ProfileData": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "google_email": {
+                    "type": "string"
+                },
+                "google_linked": {
+                    "type": "boolean"
+                },
+                "has_password": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/internal_user.Role"
+                },
+                "sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_user.ProfileSessionSummary"
+                    }
+                }
+            }
+        },
+        "internal_user.ProfileResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_user.ProfileData"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_user.ProfileSessionSummary": {
+            "type": "object",
+            "properties": {
+                "client_ip": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_current": {
+                    "type": "boolean"
+                },
+                "user_agent": {
+                    "type": "string"
                 }
             }
         },
@@ -5941,6 +6654,99 @@
                 },
                 "role": {
                     "$ref": "#/definitions/internal_user.Role"
+                }
+            }
+        },
+        "internal_user.UnlinkGoogleRequest": {
+            "type": "object",
+            "required": [
+                "current_password"
+            ],
+            "properties": {
+                "current_password": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_user.UpdateProfileRequest": {
+            "type": "object",
+            "required": [
+                "display_name"
+            ],
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "minLength": 1
+                }
+            }
+        },
+        "internal_user.UpdateProfileResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_user.User"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "internal_user.User": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "password_hash": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/internal_user.Role"
+                }
+            }
+        },
+        "internal_user.VerifyLinkGoogleCodeData": {
+            "type": "object",
+            "properties": {
+                "verification_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_user.VerifyLinkGoogleCodeRequest": {
+            "type": "object",
+            "required": [
+                "code"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_user.VerifyLinkGoogleCodeResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/internal_user.VerifyLinkGoogleCodeData"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },

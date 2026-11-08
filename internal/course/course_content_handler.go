@@ -94,6 +94,173 @@ func (h *Handler) levels(c fiber.Ctx) error {
 	return c.JSON(response)
 }
 
+// levelDetail godoc
+// @Summary Detail level untuk admin
+// @Description Memerlukan role Admin. Mengambil detail level berdasarkan ID.
+// @Tags Admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "UUID level" Format(uuid)
+// @Success 200 {object} model.LevelResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/levels/{id} [get]
+func (h *Handler) levelDetail(c fiber.Ctx) error {
+	id, err := resourceID(c)
+	if err != nil {
+		return bad(c, "ID tidak valid")
+	}
+	response, err := h.service.AdminLevelDetail(c.Context(), id)
+	if err != nil {
+		return serverError(c, err)
+	}
+	return c.JSON(response)
+}
+
+// createLevel godoc
+// @Summary Buat level baru
+// @Description Memerlukan role Admin. Membuat level baru beserta daftar poin kartu harga.
+// @Tags Admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.LevelInput true "Data level"
+// @Success 201 {object} model.LevelResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/levels [post]
+func (h *Handler) createLevel(c fiber.Ctx) error {
+	var body model.LevelInput
+	if err := c.Bind().Body(&body); err != nil {
+		return bad(c, "data level tidak valid")
+	}
+	response, err := h.service.CreateAdminLevel(c.Context(), body)
+	if err != nil {
+		return serverError(c, err)
+	}
+	return c.Status(201).JSON(response)
+}
+
+// updateLevel godoc
+// @Summary Perbarui level
+// @Description Memerlukan role Admin. Memperbarui level (kode, nama, deskripsi, urutan, harga, poin) atau hanya harga.
+// @Tags Admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "UUID level" Format(uuid)
+// @Param request body model.LevelInput true "Data level"
+// @Success 200 {object} model.LevelResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/levels/{id} [patch]
+func (h *Handler) updateLevel(c fiber.Ctx) error {
+	id, err := resourceID(c)
+	if err != nil {
+		return bad(c, "ID tidak valid")
+	}
+	raw := c.Body()
+	var rawMap map[string]any
+	if err := json.Unmarshal(raw, &rawMap); err != nil {
+		return bad(c, "harga level tidak valid")
+	}
+	if _, hasCode := rawMap["code"]; !hasCode {
+		if _, hasName := rawMap["name"]; !hasName {
+			var priceReq model.UpdateLevelPriceRequest
+			if err := json.Unmarshal(raw, &priceReq); err != nil {
+				return bad(c, "harga level tidak valid")
+			}
+			response, err := h.service.UpdateAdminLevelPrice(c.Context(), id, priceReq)
+			if err != nil {
+				return serverError(c, err)
+			}
+			return c.JSON(response)
+		}
+	}
+	var body model.LevelInput
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return bad(c, "data level tidak valid")
+	}
+	response, err := h.service.UpdateAdminLevel(c.Context(), id, body)
+	if err != nil {
+		return serverError(c, err)
+	}
+	return c.JSON(response)
+}
+
+// deleteLevel godoc
+// @Summary Hapus level
+// @Description Memerlukan role Admin. Menghapus level jika tidak digunakan oleh kursus.
+// @Tags Admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "UUID level" Format(uuid)
+// @Success 200 {object} model.StatusResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/levels/{id} [delete]
+func (h *Handler) deleteLevel(c fiber.Ctx) error {
+	id, err := resourceID(c)
+	if err != nil {
+		return bad(c, "ID tidak valid")
+	}
+	response, err := h.service.DeleteAdminLevel(c.Context(), id)
+	if err != nil {
+		return serverError(c, err)
+	}
+	return c.JSON(response)
+}
+
+// updateLevelPrice godoc
+// @Summary Perbarui harga level
+// @Description Memerlukan role Admin. Memperbarui harga level dalam satuan Rupiah (0 - 100000000).
+// @Tags Admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "UUID level" Format(uuid)
+// @Param request body model.UpdateLevelPriceRequest true "Harga level"
+// @Success 200 {object} model.LevelResponse
+// @Failure 400 {object} utils.ErrorRes
+// @Failure 401 {object} utils.ErrorRes
+// @Failure 403 {object} utils.ErrorRes
+// @Failure 404 {object} utils.ErrorRes
+// @Failure 500 {object} utils.ErrorRes
+// @Router /admin/levels/{id} [patch]
+func (h *Handler) updateLevelPrice(c fiber.Ctx) error {
+	return h.updateLevel(c)
+}
+
+// publicLevels godoc
+// @Summary Daftar level publik
+// @Description Mengambil seluruh level beserta harga dalam urutan order_index untuk publik tanpa autentikasi.
+// @Tags Courses
+// @Produce json
+// @Success 200 {object} model.LevelsResponse
+// @Failure 500 {object} utils.ErrorRes
+// @Router /levels [get]
+func (h *Handler) publicLevels(c fiber.Ctx) error {
+	response, err := h.service.PublicLevels(c.Context())
+	if err != nil {
+		return serverError(c, err)
+	}
+	return c.JSON(response)
+}
+
 // preview godoc
 // @Summary Pratinjau konten lesson
 // @Description Memerlukan role Admin. Membersihkan HTML content dan merapikan tips tanpa menyimpan konten. Field tambahan pada objek content dipertahankan. Content kosong/null menjadi objek dengan content dan tips kosong; string HTML lama juga diterima.

@@ -24,12 +24,18 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	admin := app.Group("/api/v1/admin", h.middleware.AuthMiddleware(), h.middleware.RequireRole("Admin"))
 	admin.Get("/catalog", h.catalog)
 	admin.Get("/levels", h.levels)
+	admin.Post("/levels", h.createLevel)
+	admin.Get("/levels/:id", h.levelDetail)
+	admin.Patch("/levels/:id", h.updateLevel)
+	admin.Delete("/levels/:id", h.deleteLevel)
 	admin.Post("/lessons/preview", h.preview)
 	admin.Post("/modules/reorder", func(c fiber.Ctx) error { return h.adminReorder(c, "module") })
 	admin.Post("/lessons/reorder", func(c fiber.Ctx) error { return h.adminReorder(c, "lesson") })
 	h.registerAdminContent(admin, "/courses", "course")
 	h.registerAdminContent(admin, "/modules", "module")
 	h.registerAdminContent(admin, "/lessons", "lesson")
+
+	app.Get("/api/v1/levels", h.publicLevels)
 
 	courseGroup := app.Group("/api/v1/courses", h.middleware.AuthMiddleware())
 	courseGroup.Get("", h.list)

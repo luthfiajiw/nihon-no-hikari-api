@@ -13,6 +13,13 @@ definitions:
       refresh_token_expires_at:
         type: string
     type: object
+  internal_auth.GoogleSignInRequest:
+    properties:
+      id_token:
+        type: string
+    required:
+    - id_token
+    type: object
   internal_auth.LogoutRequest:
     properties:
       session_id:
@@ -246,9 +253,20 @@ definitions:
         type: string
       order_index:
         type: integer
+      price:
+        example: 149000
+        type: integer
       updated_at:
         format: date-time
         type: string
+    type: object
+  internal_course.LevelResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_course.Level'
+      success:
+        example: true
+        type: boolean
     type: object
   internal_course.LevelsResponse:
     properties:
@@ -304,6 +322,12 @@ definitions:
       success:
         example: true
         type: boolean
+    type: object
+  internal_course.UpdateLevelPriceRequest:
+    properties:
+      price:
+        example: 149000
+        type: integer
     type: object
   internal_course.UpdateResponse:
     properties:
@@ -1118,6 +1142,19 @@ definitions:
       success:
         type: boolean
     type: object
+  internal_user.ChangePasswordRequest:
+    properties:
+      confirm_password:
+        type: string
+      current_password:
+        type: string
+      new_password:
+        minLength: 8
+        type: string
+    required:
+    - confirm_password
+    - new_password
+    type: object
   internal_user.ChangeRoleRequest:
     properties:
       role:
@@ -1138,6 +1175,16 @@ definitions:
         example: true
         type: boolean
     type: object
+  internal_user.LinkGoogleRequest:
+    properties:
+      id_token:
+        type: string
+      verification_token:
+        type: string
+    required:
+    - id_token
+    - verification_token
+    type: object
   internal_user.ListUsersResponse:
     properties:
       data:
@@ -1147,6 +1194,52 @@ definitions:
       success:
         example: true
         type: boolean
+    type: object
+  internal_user.ProfileData:
+    properties:
+      avatar_url:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      google_email:
+        type: string
+      google_linked:
+        type: boolean
+      has_password:
+        type: boolean
+      id:
+        type: string
+      role:
+        $ref: '#/definitions/internal_user.Role'
+      sessions:
+        items:
+          $ref: '#/definitions/internal_user.ProfileSessionSummary'
+        type: array
+    type: object
+  internal_user.ProfileResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_user.ProfileData'
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_user.ProfileSessionSummary:
+    properties:
+      client_ip:
+        type: string
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      is_current:
+        type: boolean
+      user_agent:
+        type: string
     type: object
   internal_user.Role:
     enum:
@@ -1166,6 +1259,67 @@ definitions:
         type: string
       role:
         $ref: '#/definitions/internal_user.Role'
+    type: object
+  internal_user.UnlinkGoogleRequest:
+    properties:
+      current_password:
+        type: string
+    required:
+    - current_password
+    type: object
+  internal_user.UpdateProfileRequest:
+    properties:
+      avatar_url:
+        type: string
+      display_name:
+        maxLength: 120
+        minLength: 1
+        type: string
+    required:
+    - display_name
+    type: object
+  internal_user.UpdateProfileResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_user.User'
+      success:
+        example: true
+        type: boolean
+    type: object
+  internal_user.User:
+    properties:
+      avatar_url:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      password_hash:
+        type: string
+      role:
+        $ref: '#/definitions/internal_user.Role'
+    type: object
+  internal_user.VerifyLinkGoogleCodeData:
+    properties:
+      verification_token:
+        type: string
+    type: object
+  internal_user.VerifyLinkGoogleCodeRequest:
+    properties:
+      code:
+        type: string
+    required:
+    - code
+    type: object
+  internal_user.VerifyLinkGoogleCodeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/internal_user.VerifyLinkGoogleCodeData'
+      success:
+        example: true
+        type: boolean
     type: object
   nihon-no-hikari-api_internal_course_model.Course:
     properties:
@@ -2565,6 +2719,57 @@ paths:
       summary: Daftar level untuk admin
       tags:
       - Admin
+  /admin/levels/{id}:
+    patch:
+      consumes:
+      - application/json
+      description: Memerlukan role Admin. Memperbarui harga level dalam satuan Rupiah
+        (0 - 100000000).
+      parameters:
+      - description: UUID level
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Harga level
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_course.UpdateLevelPriceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_course.LevelResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Perbarui harga level
+      tags:
+      - Admin
   /admin/me:
     get:
       description: Memastikan sesi pengguna memiliki role Admin.
@@ -3559,6 +3764,45 @@ paths:
       summary: Ubah role pengguna
       tags:
       - Admin Users
+  /auth/google:
+    post:
+      consumes:
+      - application/json
+      description: Memverifikasi Google ID token, menautkan atau membuat akun, lalu
+        membuat sesi baru.
+      parameters:
+      - description: Google ID token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.GoogleSignInRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_auth.SignInResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      summary: Masuk dengan Google
+      tags:
+      - Auth
   /auth/register:
     post:
       consumes:
@@ -4076,6 +4320,24 @@ paths:
       summary: Token sementara Azure untuk pembacaan lesson
       tags:
       - Lessons
+  /levels:
+    get:
+      description: Mengambil seluruh level beserta harga dalam urutan order_index
+        untuk publik tanpa autentikasi.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_course.LevelsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      summary: Daftar level publik
+      tags:
+      - Courses
   /question-sets:
     get:
       description: Mengambil seluruh question set untuk sebuah lesson.
@@ -4291,6 +4553,273 @@ paths:
       summary: Kirim jawaban attempt
       tags:
       - Questions
+  /user/link-google:
+    post:
+      consumes:
+      - application/json
+      description: Menautkan akun Google ke akun pengguna saat ini menggunakan Google
+        ID token dan token verifikasi email.
+      parameters:
+      - description: Google ID Token dan Verification Token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_user.LinkGoogleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Hubungkan akun Google
+      tags:
+      - User Profile
+  /user/link-google/request-code:
+    post:
+      description: Mengirimkan kode 6-digit OTP ke email akun untuk verifikasi tautan
+        akun Google.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Minta kode verifikasi tautan Google
+      tags:
+      - User Profile
+  /user/link-google/verify-code:
+    post:
+      consumes:
+      - application/json
+      description: Memverifikasi kode 6-digit OTP dan menghasilkan verification_token
+        untuk penautan Google.
+      parameters:
+      - description: Kode OTP 6-digit
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_user.VerifyLinkGoogleCodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_user.VerifyLinkGoogleCodeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Verifikasi kode OTP tautan Google
+      tags:
+      - User Profile
+  /user/password:
+    post:
+      consumes:
+      - application/json
+      description: Memperbarui kata sandi pengguna atau membuat kata sandi pertama
+        kali bagi pengguna OAuth.
+      parameters:
+      - description: Data perubahan kata sandi
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_user.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Ubah atau atur kata sandi
+      tags:
+      - User Profile
+  /user/profile:
+    get:
+      description: Mengambil data profil diri, status kata sandi, akun Google tertaut,
+        dan daftar sesi aktif.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_user.ProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Profil pengguna saat ini
+      tags:
+      - User Profile
+    patch:
+      consumes:
+      - application/json
+      description: Mengubah nama tampilan dan/atau avatar profil.
+      parameters:
+      - description: Data pembaruan profil
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_user.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_user.UpdateProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Perbarui profil diri
+      tags:
+      - User Profile
+  /user/sessions/other:
+    delete:
+      description: Menutup seluruh sesi masuk aktif pada perangkat lain milik pengguna
+        selain sesi saat ini.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Cabut seluruh sesi lain
+      tags:
+      - User Profile
+  /user/unlink-google:
+    post:
+      consumes:
+      - application/json
+      description: Memutuskan tautan akun Google dari akun pengguna saat ini menggunakan
+        kata sandi saat ini.
+      parameters:
+      - description: Kata sandi saat ini
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_user.UnlinkGoogleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.SuccessRes'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/nihon-no-hikari-api_pkg_utils.ErrorRes'
+      security:
+      - BearerAuth: []
+      summary: Putuskan tautan akun Google
+      tags:
+      - User Profile
 schemes:
 - http
 - https

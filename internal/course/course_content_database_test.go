@@ -12,12 +12,14 @@ import (
 	"nihon-no-hikari-api/internal/question"
 	"nihon-no-hikari-api/internal/testdb"
 	"nihon-no-hikari-api/pkg/db"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 )
 
 func TestAdminContentDatabase(t *testing.T) {
 	pool := testdb.New(t, 13)
+	testdb.Migrate(t, pool, 18, "up")
 	ctx := context.Background()
 	user, setID, _, _ := testdb.Fixture(t, pool)
 	repository := NewRepository(pool)
@@ -221,5 +223,47 @@ func TestAdminContentDatabase(t *testing.T) {
 		if err == nil {
 			t.Fatal("second transaction bypassed row lock")
 		}
+	})
+
+	t.Run("level price updates and migration rollback", func(t *testing.T) {
+		res, err := svc.UpdateAdminLevelPrice(ctx, level, model.UpdateLevelPriceRequest{Price: utils.Ptr(int64(149000))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Data.Price != 149000 {
+			t.Fatalf("expected price 149000, got %d", res.Data.Price)
+		}
+
+		adminLevels, err := svc.AdminLevels(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(adminLevels.Data) == 0 || adminLevels.Data[0].Price != 149000 {
+			t.Fatalf("expected admin level price 149000, got %+v", adminLevels.Data)
+		}
+
+		publicLevels, err := svc.PublicLevels(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(publicLevels.Data) == 0 || publicLevels.Data[0].Price != 149000 {
+			t.Fatalf("expected public level price 149000, got %+v", publicLevels.Data)
+		}
+
+		// Unknown UUID
+		_, err = svc.UpdateAdminLevelPrice(ctx, uuid.New(), model.UpdateLevelPriceRequest{Price: utils.Ptr(int64(149000))})
+		if !errors.Is(err, ErrNotFound) || err.Error() != "level tidak ditemukan" {
+			t.Fatalf("expected not found error, got %v", err)
+		}
+
+		// Validation bounds
+		_, err = svc.UpdateAdminLevelPrice(ctx, level, model.UpdateLevelPriceRequest{Price: utils.Ptr(int64(-1))})
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("expected invalid input for negative price, got %v", err)
+		}
+
+		// Clean rollback and re-migrate test
+		testdb.Migrate(t, pool, 18, "down")
+		testdb.Migrate(t, pool, 18, "up")
 	})
 }

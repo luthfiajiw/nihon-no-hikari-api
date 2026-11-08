@@ -71,6 +71,7 @@ type ProfileData struct {
 	Role         Role                    `json:"role"`
 	HasPassword  bool                    `json:"has_password"`
 	GoogleLinked bool                    `json:"google_linked"`
+	GoogleEmail  *string                 `json:"google_email"`
 	Sessions     []ProfileSessionSummary `json:"sessions"`
 }
 

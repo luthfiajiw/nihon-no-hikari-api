@@ -37,20 +37,22 @@ func (m *mockMailer) SendWithAttachments(ctx context.Context, to, subject, text,
 type mockUserRepo struct {
 	users         map[uuid.UUID]User
 	identities    map[string]uuid.UUID // provider:sub -> userID
-	userIdent     map[uuid.UUID]map[string]string
-	sessions      map[uuid.UUID][]ProfileSessionSummary
+	userIdent      map[uuid.UUID]map[string]string
+	userIdentEmail map[uuid.UUID]map[string]string
+	sessions       map[uuid.UUID][]ProfileSessionSummary
 	passwordHash  map[uuid.UUID]string
 	verifications []EmailVerification
 }
 
 func newMockUserRepo() *mockUserRepo {
 	return &mockUserRepo{
-		users:         make(map[uuid.UUID]User),
-		identities:    make(map[string]uuid.UUID),
-		userIdent:     make(map[uuid.UUID]map[string]string),
-		sessions:      make(map[uuid.UUID][]ProfileSessionSummary),
-		passwordHash:  make(map[uuid.UUID]string),
-		verifications: make([]EmailVerification, 0),
+		users:          make(map[uuid.UUID]User),
+		identities:     make(map[string]uuid.UUID),
+		userIdent:      make(map[uuid.UUID]map[string]string),
+		userIdentEmail: make(map[uuid.UUID]map[string]string),
+		sessions:       make(map[uuid.UUID][]ProfileSessionSummary),
+		passwordHash:   make(map[uuid.UUID]string),
+		verifications:  make([]EmailVerification, 0),
 	}
 }
 
@@ -98,6 +100,12 @@ func (m *mockUserRepo) GetProfile(ctx context.Context, userID uuid.UUID, current
 	hasPwd := pwd != ""
 
 	_, googleLinked := m.userIdent[userID]["google"]
+	var googleEmail *string
+	if googleLinked && m.userIdentEmail[userID] != nil {
+		if em, ok := m.userIdentEmail[userID]["google"]; ok && em != "" {
+			googleEmail = &em
+		}
+	}
 
 	sessions := make([]ProfileSessionSummary, 0)
 	for _, s := range m.sessions[userID] {
@@ -113,6 +121,7 @@ func (m *mockUserRepo) GetProfile(ctx context.Context, userID uuid.UUID, current
 		Role:         u.Role,
 		HasPassword:  hasPwd,
 		GoogleLinked: googleLinked,
+		GoogleEmail:  googleEmail,
 		Sessions:     sessions,
 	}, nil
 }
@@ -158,6 +167,10 @@ func (m *mockUserRepo) CreateIdentity(ctx context.Context, userID uuid.UUID, pro
 		m.userIdent[userID] = make(map[string]string)
 	}
 	m.userIdent[userID][provider] = sub
+	if m.userIdentEmail[userID] == nil {
+		m.userIdentEmail[userID] = make(map[string]string)
+	}
+	m.userIdentEmail[userID][provider] = email
 	return nil
 }
 
@@ -170,6 +183,9 @@ func (m *mockUserRepo) DeleteIdentity(ctx context.Context, userID uuid.UUID, pro
 		return utils.ErrGoogleNotLinked
 	}
 	delete(m.userIdent[userID], provider)
+	if m.userIdentEmail[userID] != nil {
+		delete(m.userIdentEmail[userID], provider)
+	}
 	delete(m.identities, provider+":"+sub)
 	return nil
 }
@@ -297,6 +313,21 @@ func TestUserService_GetProfile(t *testing.T) {
 	}
 	if !p.Sessions[0].IsCurrent {
 		t.Errorf("expected first session to be current")
+	}
+	if p.GoogleLinked || p.GoogleEmail != nil {
+		t.Errorf("expected Google not linked initially, got linked=%v email=%v", p.GoogleLinked, p.GoogleEmail)
+	}
+
+	_ = repo.CreateIdentity(context.Background(), userID, "google", "sub-123", "google.kenji@example.com")
+	pWithGoogle, err := svc.GetProfile(context.Background(), userID, sessionID)
+	if err != nil {
+		t.Fatalf("unexpected error fetching profile with google: %v", err)
+	}
+	if !pWithGoogle.GoogleLinked {
+		t.Errorf("expected GoogleLinked to be true")
+	}
+	if pWithGoogle.GoogleEmail == nil || *pWithGoogle.GoogleEmail != "google.kenji@example.com" {
+		t.Errorf("expected google_email to be 'google.kenji@example.com', got %v", pWithGoogle.GoogleEmail)
 	}
 }
 

@@ -17,6 +17,11 @@ import (
 type ContentRepository interface {
 	Catalog(context.Context, *uuid.UUID) (model.CatalogData, error)
 	Levels(context.Context) ([]model.Level, error)
+	Level(context.Context, uuid.UUID) (model.Level, error)
+	CreateLevel(context.Context, uuid.UUID, model.LevelInput) (model.Level, error)
+	UpdateLevel(context.Context, uuid.UUID, model.LevelInput) (model.Level, error)
+	DeleteLevel(context.Context, uuid.UUID) error
+	UpdateLevelPrice(context.Context, uuid.UUID, int32) (model.Level, error)
 	ListContent(context.Context, string) ([]json.RawMessage, error)
 	Content(context.Context, string, uuid.UUID) (json.RawMessage, error)
 	ContentState(context.Context, string, uuid.UUID) (model.ContentState, error)
@@ -282,7 +287,155 @@ func (r *dbRepository) Levels(ctx context.Context) ([]model.Level, error) {
 	if err != nil {
 		return nil, err
 	}
-	return decodeRecords[model.Level](items)
+	levels, err := decodeRecords[model.Level](items)
+	if err != nil {
+		return nil, err
+	}
+	for i := range levels {
+		if levels[i].Points == nil {
+			levels[i].Points = []string{}
+		}
+	}
+	return levels, nil
+}
+
+func (r *dbRepository) Level(ctx context.Context, id uuid.UUID) (model.Level, error) {
+	var raw json.RawMessage
+	err := r.QueryRow(ctx, `SELECT to_jsonb(t) FROM public.levels t WHERE id = $1`, id).Scan(&raw)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return model.Level{}, notFoundMessage("level tidak ditemukan")
+		}
+		return model.Level{}, err
+	}
+	var item model.Level
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return model.Level{}, err
+	}
+	if item.Points == nil {
+		item.Points = []string{}
+	}
+	return item, nil
+}
+
+func (r *dbRepository) CreateLevel(ctx context.Context, id uuid.UUID, input model.LevelInput) (model.Level, error) {
+	points := input.Points
+	if points == nil {
+		points = []string{}
+	}
+	rawPoints, err := json.Marshal(points)
+	if err != nil {
+		return model.Level{}, err
+	}
+	var raw json.RawMessage
+	err = r.QueryRow(
+		ctx,
+		`INSERT INTO public.levels (id, code, name, description, order_index, price, points)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING to_jsonb(levels.*)`,
+		id,
+		input.Code,
+		input.Name,
+		input.Description,
+		*input.OrderIndex,
+		*input.Price,
+		rawPoints,
+	).Scan(&raw)
+	if err != nil {
+		if errors.Is(err, ErrConflict) {
+			return model.Level{}, conflictMessage("kode atau urutan level sudah dipakai")
+		}
+		return model.Level{}, err
+	}
+	var item model.Level
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return model.Level{}, err
+	}
+	if item.Points == nil {
+		item.Points = []string{}
+	}
+	return item, nil
+}
+
+func (r *dbRepository) UpdateLevel(ctx context.Context, id uuid.UUID, input model.LevelInput) (model.Level, error) {
+	points := input.Points
+	if points == nil {
+		points = []string{}
+	}
+	rawPoints, err := json.Marshal(points)
+	if err != nil {
+		return model.Level{}, err
+	}
+	var raw json.RawMessage
+	err = r.QueryRow(
+		ctx,
+		`UPDATE public.levels
+		SET code = $2, name = $3, description = $4, order_index = $5, price = $6, points = $7, updated_at = now()
+		WHERE id = $1
+		RETURNING to_jsonb(levels.*)`,
+		id,
+		input.Code,
+		input.Name,
+		input.Description,
+		*input.OrderIndex,
+		*input.Price,
+		rawPoints,
+	).Scan(&raw)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return model.Level{}, notFoundMessage("level tidak ditemukan")
+		}
+		if errors.Is(err, ErrConflict) {
+			return model.Level{}, conflictMessage("kode atau urutan level sudah dipakai")
+		}
+		return model.Level{}, err
+	}
+	var item model.Level
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return model.Level{}, err
+	}
+	if item.Points == nil {
+		item.Points = []string{}
+	}
+	return item, nil
+}
+
+func (r *dbRepository) DeleteLevel(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.Exec(ctx, `DELETE FROM public.levels WHERE id = $1`, id)
+	if err != nil {
+		if errors.Is(err, ErrInvalidRelation) {
+			return conflictMessage("level masih digunakan oleh kursus")
+		}
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return notFoundMessage("level tidak ditemukan")
+	}
+	return nil
+}
+
+func (r *dbRepository) UpdateLevelPrice(ctx context.Context, id uuid.UUID, price int32) (model.Level, error) {
+	var raw json.RawMessage
+	err := r.QueryRow(
+		ctx,
+		`UPDATE public.levels SET price = $2, updated_at = now() WHERE id = $1 RETURNING to_jsonb(levels.*)`,
+		id,
+		price,
+	).Scan(&raw)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return model.Level{}, notFoundMessage("level tidak ditemukan")
+		}
+		return model.Level{}, err
+	}
+	var item model.Level
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return model.Level{}, err
+	}
+	if item.Points == nil {
+		item.Points = []string{}
+	}
+	return item, nil
 }
 
 func (r *dbRepository) SaveCore(ctx context.Context, kind string, id uuid.UUID, v model.CoreInput, create bool) error {

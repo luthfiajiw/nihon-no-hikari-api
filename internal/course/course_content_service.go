@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/contenthtml"
@@ -16,6 +17,12 @@ import (
 type ContentService interface {
 	AdminCatalog(context.Context, *uuid.UUID) (model.CatalogResponse, error)
 	AdminLevels(context.Context) (model.LevelsResponse, error)
+	PublicLevels(context.Context) (model.LevelsResponse, error)
+	AdminLevelDetail(context.Context, uuid.UUID) (model.LevelResponse, error)
+	CreateAdminLevel(context.Context, model.LevelInput) (model.LevelResponse, error)
+	UpdateAdminLevel(context.Context, uuid.UUID, model.LevelInput) (model.LevelResponse, error)
+	DeleteAdminLevel(context.Context, uuid.UUID) (model.StatusResponse, error)
+	UpdateAdminLevelPrice(context.Context, uuid.UUID, model.UpdateLevelPriceRequest) (model.LevelResponse, error)
 	PreviewLessonContent(context.Context, json.RawMessage) (model.PreviewResponse, error)
 	ListAdminContent(context.Context, string) (model.ContentListResponse, error)
 	AdminContentDetail(context.Context, string, uuid.UUID) (model.ContentDetailResponse, error)
@@ -55,6 +62,103 @@ func (s *service) AdminCatalog(ctx context.Context, courseID *uuid.UUID) (model.
 func (s *service) AdminLevels(ctx context.Context) (model.LevelsResponse, error) {
 	items, err := s.repository.Levels(ctx)
 	return model.LevelsResponse{Success: true, Data: items}, err
+}
+
+func (s *service) PublicLevels(ctx context.Context) (model.LevelsResponse, error) {
+	return s.AdminLevels(ctx)
+}
+
+func validateLevelInput(req model.LevelInput) (model.LevelInput, error) {
+	code := strings.TrimSpace(req.Code)
+	if code == "" || len(code) > 8 {
+		return req, inputMessage("kode level harus diisi dan maksimal 8 karakter")
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" || len(name) > 100 {
+		return req, inputMessage("nama level harus diisi dan maksimal 100 karakter")
+	}
+	var desc *string
+	if req.Description != nil {
+		d := strings.TrimSpace(*req.Description)
+		if d != "" {
+			desc = &d
+		}
+	}
+	if req.OrderIndex == nil || *req.OrderIndex < 0 || *req.OrderIndex > 32767 {
+		return req, inputMessage("urutan level harus antara 0 dan 32767")
+	}
+	if req.Price == nil || *req.Price < 0 || *req.Price > 100_000_000 {
+		return req, inputMessage("harga level harus antara 0 dan 100000000")
+	}
+	points := make([]string, 0, len(req.Points))
+	for _, p := range req.Points {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			if len(trimmed) > 160 {
+				return req, inputMessage("setiap poin maksimal 160 karakter")
+			}
+			points = append(points, trimmed)
+		}
+	}
+	if len(points) > 20 {
+		return req, inputMessage("maksimal 20 poin per level")
+	}
+	req.Code = code
+	req.Name = name
+	req.Description = desc
+	req.Points = points
+	return req, nil
+}
+
+func (s *service) AdminLevelDetail(ctx context.Context, id uuid.UUID) (model.LevelResponse, error) {
+	item, err := s.repository.Level(ctx, id)
+	if err != nil {
+		return model.LevelResponse{}, err
+	}
+	return model.LevelResponse{Success: true, Data: item}, nil
+}
+
+func (s *service) CreateAdminLevel(ctx context.Context, req model.LevelInput) (model.LevelResponse, error) {
+	valid, err := validateLevelInput(req)
+	if err != nil {
+		return model.LevelResponse{}, err
+	}
+	id := uuid.New()
+	item, err := s.repository.CreateLevel(ctx, id, valid)
+	if err != nil {
+		return model.LevelResponse{}, err
+	}
+	return model.LevelResponse{Success: true, Data: item}, nil
+}
+
+func (s *service) UpdateAdminLevel(ctx context.Context, id uuid.UUID, req model.LevelInput) (model.LevelResponse, error) {
+	valid, err := validateLevelInput(req)
+	if err != nil {
+		return model.LevelResponse{}, err
+	}
+	item, err := s.repository.UpdateLevel(ctx, id, valid)
+	if err != nil {
+		return model.LevelResponse{}, err
+	}
+	return model.LevelResponse{Success: true, Data: item}, nil
+}
+
+func (s *service) DeleteAdminLevel(ctx context.Context, id uuid.UUID) (model.StatusResponse, error) {
+	if err := s.repository.DeleteLevel(ctx, id); err != nil {
+		return model.StatusResponse{}, err
+	}
+	return model.StatusResponse{Success: true}, nil
+}
+
+func (s *service) UpdateAdminLevelPrice(ctx context.Context, id uuid.UUID, req model.UpdateLevelPriceRequest) (model.LevelResponse, error) {
+	if req.Price == nil || *req.Price < 0 || *req.Price > 100_000_000 {
+		return model.LevelResponse{}, inputMessage("harga level harus antara 0 dan 100000000")
+	}
+	item, err := s.repository.UpdateLevelPrice(ctx, id, int32(*req.Price))
+	if err != nil {
+		return model.LevelResponse{}, err
+	}
+	return model.LevelResponse{Success: true, Data: item}, nil
 }
 
 func (s *service) PreviewLessonContent(ctx context.Context, raw json.RawMessage) (model.PreviewResponse, error) {

@@ -31,6 +31,10 @@ type contentRepositoryStub struct {
 	siblings      func(context.Context, string, uuid.UUID) ([]uuid.UUID, error)
 	order         func(context.Context, string, model.ReorderRequest) error
 	prerequisites func(context.Context, string, uuid.UUID, []uuid.UUID) (int, bool, error)
+	level         func(context.Context, uuid.UUID) (model.Level, error)
+	createLevel   func(context.Context, uuid.UUID, model.LevelInput) (model.Level, error)
+	updateLevel   func(context.Context, uuid.UUID, model.LevelInput) (model.Level, error)
+	deleteLevel   func(context.Context, uuid.UUID) error
 }
 
 type transactionToken struct{ pgx.Tx }
@@ -107,6 +111,34 @@ func (r *contentRepositoryStub) LockSiblings(c context.Context, k string, id uui
 
 func (r *contentRepositoryStub) ApplyOrder(c context.Context, k string, v model.ReorderRequest) error {
 	return r.order(c, k, v)
+}
+
+func (r *contentRepositoryStub) Level(ctx context.Context, id uuid.UUID) (model.Level, error) {
+	if r.level != nil {
+		return r.level(ctx, id)
+	}
+	return model.Level{}, errors.New("unexpected Level call")
+}
+
+func (r *contentRepositoryStub) CreateLevel(ctx context.Context, id uuid.UUID, in model.LevelInput) (model.Level, error) {
+	if r.createLevel != nil {
+		return r.createLevel(ctx, id, in)
+	}
+	return model.Level{}, errors.New("unexpected CreateLevel call")
+}
+
+func (r *contentRepositoryStub) UpdateLevel(ctx context.Context, id uuid.UUID, in model.LevelInput) (model.Level, error) {
+	if r.updateLevel != nil {
+		return r.updateLevel(ctx, id, in)
+	}
+	return model.Level{}, errors.New("unexpected UpdateLevel call")
+}
+
+func (r *contentRepositoryStub) DeleteLevel(ctx context.Context, id uuid.UUID) error {
+	if r.deleteLevel != nil {
+		return r.deleteLevel(ctx, id)
+	}
+	return errors.New("unexpected DeleteLevel call")
 }
 
 func (r *contentRepositoryStub) PrerequisiteState(c context.Context, k string, id uuid.UUID, v []uuid.UUID) (int, bool, error) {
@@ -295,5 +327,102 @@ func TestServiceClassifiesSharedTransactionErrors(t *testing.T) {
 				t.Fatalf("called=%t error=%v", called, err)
 			}
 		})
+	}
+}
+
+func TestLevelCRUDValidationAndOperations(t *testing.T) {
+	ctx := context.Background()
+	levelID := uuid.New()
+	order := int64(1)
+	price := int64(49000)
+	desc := "Level pemula"
+
+	// 1. Validation tests
+	for _, tc := range []struct {
+		name    string
+		input   model.LevelInput
+		wantErr string
+	}{
+		{"empty code", model.LevelInput{Code: "", Name: "JLPT N5", OrderIndex: &order, Price: &price}, "kode level harus diisi dan maksimal 8 karakter"},
+		{"long code", model.LevelInput{Code: "TOOLONGCODE", Name: "JLPT N5", OrderIndex: &order, Price: &price}, "kode level harus diisi dan maksimal 8 karakter"},
+		{"empty name", model.LevelInput{Code: "N5", Name: "", OrderIndex: &order, Price: &price}, "nama level harus diisi dan maksimal 100 karakter"},
+		{"missing order", model.LevelInput{Code: "N5", Name: "JLPT N5", Price: &price}, "urutan level harus antara 0 dan 32767"},
+		{"invalid order", model.LevelInput{Code: "N5", Name: "JLPT N5", OrderIndex: func() *int64 { i := int64(-1); return &i }(), Price: &price}, "urutan level harus antara 0 dan 32767"},
+		{"missing price", model.LevelInput{Code: "N5", Name: "JLPT N5", OrderIndex: &order}, "harga level harus antara 0 dan 100000000"},
+		{"negative price", model.LevelInput{Code: "N5", Name: "JLPT N5", OrderIndex: &order, Price: func() *int64 { i := int64(-50); return &i }()}, "harga level harus antara 0 dan 100000000"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newStubService(&contentRepositoryStub{})
+			_, err := svc.CreateAdminLevel(ctx, tc.input)
+			if err == nil || err.Error() != tc.wantErr {
+				t.Fatalf("got %v, want %s", err, tc.wantErr)
+			}
+		})
+	}
+
+	// 2. Successful operations
+	repo := &contentRepositoryStub{
+		level: func(_ context.Context, id uuid.UUID) (model.Level, error) {
+			if id != levelID {
+				t.Fatalf("unexpected id %v", id)
+			}
+			return model.Level{ID: levelID, Code: "N5", Name: "JLPT N5", Description: &desc, OrderIndex: 1, Price: 49000, Points: []string{"Point 1"}}, nil
+		},
+		createLevel: func(_ context.Context, id uuid.UUID, in model.LevelInput) (model.Level, error) {
+			if in.Code != "N5" || len(in.Points) != 1 {
+				t.Fatalf("unexpected input %+v", in)
+			}
+			return model.Level{ID: id, Code: in.Code, Name: in.Name, Description: in.Description, OrderIndex: int16(*in.OrderIndex), Price: int32(*in.Price), Points: in.Points}, nil
+		},
+		updateLevel: func(_ context.Context, id uuid.UUID, in model.LevelInput) (model.Level, error) {
+			if id != levelID || in.Code != "N5" {
+				t.Fatalf("unexpected update %+v", in)
+			}
+			return model.Level{ID: id, Code: in.Code, Name: in.Name, OrderIndex: int16(*in.OrderIndex), Price: int32(*in.Price), Points: in.Points}, nil
+		},
+		deleteLevel: func(_ context.Context, id uuid.UUID) error {
+			if id != levelID {
+				t.Fatalf("unexpected id %v", id)
+			}
+			return nil
+		},
+	}
+
+	svc := newStubService(repo)
+
+	// Detail
+	detail, err := svc.AdminLevelDetail(ctx, levelID)
+	if err != nil || detail.Data.Code != "N5" || len(detail.Data.Points) != 1 {
+		t.Fatalf("detail failed: %v, %+v", err, detail)
+	}
+
+	// Create
+	created, err := svc.CreateAdminLevel(ctx, model.LevelInput{
+		Code:       "N5",
+		Name:       "JLPT N5",
+		OrderIndex: &order,
+		Price:      &price,
+		Points:     []string{"Point 1"},
+	})
+	if err != nil || created.Data.Code != "N5" || created.Data.Price != 49000 {
+		t.Fatalf("create failed: %v, %+v", err, created)
+	}
+
+	// Update
+	updated, err := svc.UpdateAdminLevel(ctx, levelID, model.LevelInput{
+		Code:       "N5",
+		Name:       "JLPT N5 Updated",
+		OrderIndex: &order,
+		Price:      &price,
+		Points:     []string{"Point 1", "Point 2"},
+	})
+	if err != nil || updated.Data.Name != "JLPT N5 Updated" {
+		t.Fatalf("update failed: %v, %+v", err, updated)
+	}
+
+	// Delete
+	delRes, err := svc.DeleteAdminLevel(ctx, levelID)
+	if err != nil || !delRes.Success {
+		t.Fatalf("delete failed: %v, %+v", err, delRes)
 	}
 }

@@ -152,15 +152,18 @@ func (r *dbRepository) GetProfile(ctx context.Context, userID uuid.UUID, current
 	}
 	profile.HasPassword = passwordHash != nil && *passwordHash != ""
 
-	// Check if Google is linked in user_identities
+	// Check if Google is linked in user_identities and fetch its email
+	var googleEmail string
 	googleQuery := `
-		SELECT EXISTS(
-			SELECT 1 FROM user_identities WHERE user_id = $1 AND provider = 'google'
-		)
+		SELECT email FROM user_identities WHERE user_id = $1 AND provider = 'google' LIMIT 1
 	`
-	err = r.q.QueryRow(ctx, googleQuery, userID).Scan(&profile.GoogleLinked)
-	if err != nil {
+	err = r.q.QueryRow(ctx, googleQuery, userID).Scan(&googleEmail)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return ProfileData{}, err
+	}
+	if err == nil {
+		profile.GoogleLinked = true
+		profile.GoogleEmail = &googleEmail
 	}
 
 	// Fetch active sessions

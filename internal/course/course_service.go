@@ -14,6 +14,7 @@ import (
 
 type Service interface {
 	ContentService
+	PricingService
 	GetList(ctx context.Context) (*model.ListCourseResponse, error)
 	GetDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetailResponse, error)
 	GetLessons(ctx context.Context, courseID, userID uuid.UUID) (*model.ListLessonResponse, error)

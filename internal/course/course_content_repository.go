@@ -330,12 +330,13 @@ func (r *dbRepository) CreateLevel(ctx context.Context, id uuid.UUID, input mode
 	var raw json.RawMessage
 	err = r.QueryRow(
 		ctx,
-		`INSERT INTO public.levels (id, code, name, description, order_index, price, points)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO public.levels (id, code, name, tag, description, order_index, price, points)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING to_jsonb(levels.*)`,
 		id,
 		input.Code,
 		input.Name,
+		input.Tag,
 		input.Description,
 		*input.OrderIndex,
 		*input.Price,
@@ -370,12 +371,13 @@ func (r *dbRepository) UpdateLevel(ctx context.Context, id uuid.UUID, input mode
 	err = r.QueryRow(
 		ctx,
 		`UPDATE public.levels
-		SET code = $2, name = $3, description = $4, order_index = $5, price = $6, points = $7, updated_at = now()
+		SET code = $2, name = $3, tag = $4, description = $5, order_index = $6, price = $7, points = $8, updated_at = now()
 		WHERE id = $1
 		RETURNING to_jsonb(levels.*)`,
 		id,
 		input.Code,
 		input.Name,
+		input.Tag,
 		input.Description,
 		*input.OrderIndex,
 		*input.Price,

@@ -36,6 +36,8 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	h.registerAdminContent(admin, "/lessons", "lesson")
 
 	app.Get("/api/v1/levels", h.publicLevels)
+	app.Get("/api/v1/pricing", h.pricingList)
+	app.Get("/api/v1/pricing/:code", h.pricingDetail)
 
 	courseGroup := app.Group("/api/v1/courses", h.middleware.AuthMiddleware())
 	courseGroup.Get("", h.list)

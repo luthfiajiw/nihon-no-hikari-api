@@ -204,6 +204,7 @@ type Level struct {
 	ID          uuid.UUID `json:"id" format:"uuid"`
 	Code        string    `json:"code" example:"N5"`
 	Name        string    `json:"name"`
+	Tag         *string   `json:"tag" example:"Favorit Pemula"`
 	Description *string   `json:"description"`
 	OrderIndex  int16     `json:"order_index"`
 	Price       int32     `json:"price" example:"149000"`
@@ -215,6 +216,7 @@ type Level struct {
 type LevelInput struct {
 	Code        string   `json:"code" example:"N5"`
 	Name        string   `json:"name" example:"JLPT N5"`
+	Tag         *string  `json:"tag" example:"Favorit Pemula"`
 	Description *string  `json:"description"`
 	OrderIndex  *int64   `json:"order_index" example:"0"`
 	Price       *int64   `json:"price" example:"149000"`

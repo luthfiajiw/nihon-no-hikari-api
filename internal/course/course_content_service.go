@@ -77,6 +77,16 @@ func validateLevelInput(req model.LevelInput) (model.LevelInput, error) {
 	if name == "" || len(name) > 100 {
 		return req, inputMessage("nama level harus diisi dan maksimal 100 karakter")
 	}
+	var tag *string
+	if req.Tag != nil {
+		t := strings.TrimSpace(*req.Tag)
+		if t != "" {
+			if len(t) > 40 {
+				return req, inputMessage("tag level maksimal 40 karakter")
+			}
+			tag = &t
+		}
+	}
 	var desc *string
 	if req.Description != nil {
 		d := strings.TrimSpace(*req.Description)
@@ -105,6 +115,7 @@ func validateLevelInput(req model.LevelInput) (model.LevelInput, error) {
 	}
 	req.Code = code
 	req.Name = name
+	req.Tag = tag
 	req.Description = desc
 	req.Points = points
 	return req, nil

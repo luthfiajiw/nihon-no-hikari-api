@@ -16,6 +16,7 @@ import (
 
 type Repository interface {
 	ContentRepository
+	PricingRepository
 	UseTx(pgx.Tx) Repository
 	List(ctx context.Context) ([]model.Course, error)
 	GetCourseDetail(ctx context.Context, courseID, userID uuid.UUID) (*model.CourseDetail, error)

@@ -32,11 +32,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	err := client.EnsureBuckets(ctx, []supabasestorage.Bucket{
-		{ID: cover, Name: cover, Public: false, FileSizeLimit: kotoba.MaxCoverBytes, AllowedMIMETypes: []string{"image/png", "image/jpeg"}},
-		{ID: audio, Name: audio, Public: false, FileSizeLimit: kotoba.MaxAudioBytes, AllowedMIMETypes: []string{"audio/mpeg"}},
+		{ID: cover, Name: cover, Public: true, FileSizeLimit: kotoba.MaxCoverBytes, AllowedMIMETypes: []string{"image/png", "image/jpeg"}},
+		{ID: audio, Name: audio, Public: true, FileSizeLimit: kotoba.MaxAudioBytes, AllowedMIMETypes: []string{"audio/mpeg"}},
 	})
 	if err != nil {
 		log.Fatalf("Bucket setup failed: %v", err)
 	}
-	log.Print("Kotoba private buckets and upload limits are configured")
+	log.Print("Kotoba public buckets and upload limits are configured")
 }

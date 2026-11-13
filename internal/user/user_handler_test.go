@@ -30,6 +30,8 @@ func (a testAuth) RequireRole(role string) fiber.Handler {
 		return c.Next()
 	}
 }
+func (a testAuth) InvalidateSession(uuid.UUID) {}
+func (a testAuth) InvalidateUser(uuid.UUID)    {}
 
 type serviceStub struct {
 	Service

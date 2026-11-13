@@ -82,64 +82,12 @@ func (c *Client) request(ctx context.Context, method, path, mime string, body io
 	return status, err
 }
 
-// SignedURLs uses bounded batches and never returns permanent public URLs.
-// Callers must authorize every requested object before invoking this method.
-func (c *Client) SignedURLs(ctx context.Context, bucket string, paths []string, ttl time.Duration) (map[string]string, error) {
-	result := map[string]string{}
-	unique := []string{}
-	seen := map[string]bool{}
-	for _, path := range paths {
-		if !seen[path] {
-			seen[path] = true
-			unique = append(unique, path)
-		}
+// PublicURL builds the permanent public object URL for a public bucket.
+func (c *Client) PublicURL(bucket, path string) string {
+	if c.base == "" || bucket == "" || path == "" {
+		return ""
 	}
-	if len(unique) == 0 {
-		return result, nil
-	}
-	if !c.Enabled() {
-		return nil, ErrDisabled
-	}
-	if ttl < time.Second {
-		return nil, errors.New("invalid signed URL duration")
-	}
-	for start := 0; start < len(unique); start += 100 {
-		chunk := unique[start:min(start+100, len(unique))]
-		body, _ := json.Marshal(map[string]any{"paths": chunk, "expiresIn": int64(ttl / time.Second)})
-		status, data, err := c.requestJSON(ctx, http.MethodPost, "object/sign/"+escapedPath(bucket), "application/json", bytes.NewReader(body))
-		if err := checkStatus(status, err); err != nil {
-			return nil, err
-		}
-		var entries []struct {
-			Path      string          `json:"path"`
-			SignedURL string          `json:"signedURL"`
-			Error     json.RawMessage `json:"error"`
-		}
-		if err := json.Unmarshal(data, &entries); err != nil || len(entries) != len(chunk) {
-			return nil, errors.New("invalid signing response")
-		}
-		expected := map[string]bool{}
-		for _, path := range chunk {
-			expected[path] = true
-		}
-		for _, entry := range entries {
-			if !expected[entry.Path] || entry.SignedURL == "" || (len(entry.Error) > 0 && string(entry.Error) != "null") {
-				return nil, errors.New("storage could not sign requested object")
-			}
-			delete(expected, entry.Path)
-			full := entry.SignedURL
-			if strings.HasPrefix(full, "/object/sign/") {
-				full = c.base + "/storage/v1" + full
-			}
-			parsed, err := url.Parse(full)
-			allowed, _ := url.Parse(c.base + "/storage/v1/object/sign/" + escapedPath(bucket, entry.Path))
-			if err != nil || parsed.Scheme != allowed.Scheme || parsed.Host != allowed.Host || parsed.EscapedPath() != allowed.EscapedPath() || parsed.User != nil || parsed.Fragment != "" || parsed.Query().Get("token") == "" {
-				return nil, errors.New("invalid signed object URL")
-			}
-			result[entry.Path] = parsed.String()
-		}
-	}
-	return result, nil
+	return c.base + "/storage/v1/object/public/" + escapedPath(bucket, path)
 }
 func checkStatus(status int, err error) error {
 	if err != nil {

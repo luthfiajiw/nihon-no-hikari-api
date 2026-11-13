@@ -4,6 +4,7 @@ import (
 	"errors"
 	"nihon-no-hikari-api/pkg/utils"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -42,26 +43,30 @@ func (m *middleware) AuthMiddleware() fiber.Handler {
 			})
 		}
 
-		sessionSql := `
-			SELECT s.is_blocked, u.role
-			FROM user_sessions s
-			JOIN users u ON u.id = s.user_id
-			WHERE s.id = $1 AND s.user_id = $2 AND s.expires_at > NOW()
-		`
-		var isBlocked bool
-		var role string
-		err = m.pool.QueryRow(c.Context(), sessionSql, payload.ID, payload.UserID).Scan(&isBlocked, &role)
-		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"error":   "sesi tidak ditemukan",
-			})
-		}
-		if isBlocked {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"error":   "sesi sudah ditutup",
-			})
+		role, cached := m.cache.get(payload.ID, payload.UserID)
+		if !cached {
+			sessionSql := `
+				SELECT s.is_blocked, u.role, s.expires_at
+				FROM user_sessions s
+				JOIN users u ON u.id = s.user_id
+				WHERE s.id = $1 AND s.user_id = $2 AND s.expires_at > NOW()
+			`
+			var isBlocked bool
+			var expiresAt time.Time
+			err = m.store.QueryRow(c.Context(), sessionSql, payload.ID, payload.UserID).Scan(&isBlocked, &role, &expiresAt)
+			if err != nil {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"success": false,
+					"error":   "sesi tidak ditemukan",
+				})
+			}
+			if isBlocked {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"success": false,
+					"error":   "sesi sudah ditutup",
+				})
+			}
+			m.cache.put(payload.ID, payload.UserID, role, expiresAt)
 		}
 
 		c.Locals(utils.UserIDKey, payload.UserID)

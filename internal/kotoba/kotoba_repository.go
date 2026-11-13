@@ -60,13 +60,23 @@ const vocabularyJSON = `(SELECT coalesce(jsonb_agg(jsonb_build_object(
     FROM kotoba_vocabularies v LEFT JOIN kotoba_media a ON a.id=v.audio_media_id WHERE v.topic_id=t.id)`
 
 func scanTopic(row interface{ Scan(...any) error }) (Topic, error) {
+	return scanTopicRow(row, nil)
+}
+
+func scanTopicRow(row interface{ Scan(...any) error }, total *int) (Topic, error) {
 	var t Topic
 	var active, visible bool
 	var cover uuid.UUID
 	var version int64
 	var words []byte
-	err := row.Scan(&t.ID, &t.Title, &t.Level, &t.Category, &t.Description, &t.OrderIndex, &active, &visible,
-		&cover, &version, &t.CreatedAt, &t.UpdatedAt, &t.CoverBucket, &t.CoverPath, &t.VocabularyCount, &words)
+	dest := []any{
+		&t.ID, &t.Title, &t.Level, &t.Category, &t.Description, &t.OrderIndex, &active, &visible,
+		&cover, &version, &t.CreatedAt, &t.UpdatedAt, &t.CoverBucket, &t.CoverPath, &t.VocabularyCount, &words,
+	}
+	if total != nil {
+		dest = append(dest, total)
+	}
+	err := row.Scan(dest...)
 	if err != nil {
 		return t, dbError(err)
 	}
@@ -99,31 +109,19 @@ func (r *dbRepository) ListPaginated(ctx context.Context, f Filter, admin bool) 
 	if search == "" && f.Pagination.Search != "" {
 		search = f.Pagination.Search
 	}
-	var total int
-	err := r.q.QueryRow(ctx, `SELECT count(*)`+topicFrom+`
+	const topicWhere = `
         WHERE ($1 OR (t.is_active AND t.is_visible)) AND ($2='' OR l.code=$2)
         AND ($3='' OR strpos(lower(t.title || ' ' || t.description),lower($3))>0)
         AND ($4='' OR $4='all' OR ($4='active' AND t.is_active) OR ($4='inactive' AND NOT t.is_active))
-        AND ($5='' OR $5='all' OR t.category=$5)`,
-		admin, f.Level, search, f.Status, f.Category).Scan(&total)
-	if err != nil {
-		return nil, 0, err
-	}
+        AND ($5='' OR $5='all' OR t.category=$5)`
 
 	var rows pgx.Rows
+	var err error
 	if f.Pagination.Paginated {
-		rows, err = r.q.Query(ctx, `SELECT `+topicColumns+`, '[]'::jsonb`+topicFrom+`
-        WHERE ($1 OR (t.is_active AND t.is_visible)) AND ($2='' OR l.code=$2)
-        AND ($3='' OR strpos(lower(t.title || ' ' || t.description),lower($3))>0)
-        AND ($4='' OR $4='all' OR ($4='active' AND t.is_active) OR ($4='inactive' AND NOT t.is_active))
-        AND ($5='' OR $5='all' OR t.category=$5)
+		rows, err = r.q.Query(ctx, `SELECT `+topicColumns+`, '[]'::jsonb, count(*) OVER()`+topicFrom+topicWhere+`
         ORDER BY `+order+` LIMIT $6 OFFSET $7`, admin, f.Level, search, f.Status, f.Category, f.Pagination.Limit, f.Pagination.Offset())
 	} else {
-		rows, err = r.q.Query(ctx, `SELECT `+topicColumns+`, '[]'::jsonb`+topicFrom+`
-        WHERE ($1 OR (t.is_active AND t.is_visible)) AND ($2='' OR l.code=$2)
-        AND ($3='' OR strpos(lower(t.title || ' ' || t.description),lower($3))>0)
-        AND ($4='' OR $4='all' OR ($4='active' AND t.is_active) OR ($4='inactive' AND NOT t.is_active))
-        AND ($5='' OR $5='all' OR t.category=$5)
+		rows, err = r.q.Query(ctx, `SELECT `+topicColumns+`, '[]'::jsonb, count(*) OVER()`+topicFrom+topicWhere+`
         ORDER BY `+order, admin, f.Level, search, f.Status, f.Category)
 	}
 	if err != nil {
@@ -131,8 +129,9 @@ func (r *dbRepository) ListPaginated(ctx context.Context, f Filter, admin bool) 
 	}
 	defer rows.Close()
 	result := []Topic{}
+	var total int
 	for rows.Next() {
-		t, err := scanTopic(rows)
+		t, err := scanTopicRow(rows, &total)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -140,6 +139,12 @@ func (r *dbRepository) ListPaginated(ctx context.Context, f Filter, admin bool) 
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
+	}
+	if len(result) == 0 && f.Pagination.Paginated && f.Pagination.Offset() > 0 {
+		err = r.q.QueryRow(ctx, `SELECT count(*)`+topicFrom+topicWhere, admin, f.Level, search, f.Status, f.Category).Scan(&total)
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 	return result, total, nil
 }

@@ -10,6 +10,7 @@ import (
 
 	"nihon-no-hikari-api/internal/testdb"
 	"nihon-no-hikari-api/pkg/db"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -397,6 +398,36 @@ func TestKotobaDatabase(t *testing.T) {
 		}
 		if n := countSQL(t, pool, `SELECT count(*) FROM kotoba_media WHERE id=$1`, m.ID); n != 0 {
 			t.Fatal("retry did not remove recovered object")
+		}
+	})
+	t.Run("paginated total and out-of-range fallback", func(t *testing.T) {
+		c := upload("cover")
+		for i := range 2 {
+			in := validInput()
+			in.Title = "Paginated Topic " + string(rune('A'+i))
+			in.OrderIndex = 100 + i
+			in.CoverMediaID = c.ID
+			in.Vocabulary[0].AudioMediaID = nil
+			if _, err := svc.Save(ctx, uuid.Nil, in); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		p1 := Filter{Sort: "order", Pagination: utils.PaginationParams{Paginated: true, Page: 1, Limit: 1}}
+		pOut := Filter{Sort: "title", Pagination: utils.PaginationParams{Paginated: true, Page: 99, Limit: 10}}
+
+		topics1, meta1, err := svc.ListPaginated(ctx, p1, true)
+		if err != nil || len(topics1) != 1 || meta1.Total != 2 {
+			t.Fatalf("kotoba p1 len=%d total=%d err=%v", len(topics1), meta1.Total, err)
+		}
+		topicsOut, metaOut, err := svc.ListPaginated(ctx, pOut, true)
+		if err != nil || len(topicsOut) != 0 || metaOut.Total != 2 {
+			t.Fatalf("kotoba out-of-range len=%d total=%d want=2 err=%v", len(topicsOut), metaOut.Total, err)
+		}
+		// Ensure student Sort="vocabulary" (positional ORDER BY 15) works with count(*) OVER().
+		topicsStu, metaStu, err := svc.ListPaginated(ctx, Filter{Sort: "vocabulary", Pagination: utils.PaginationParams{Paginated: true, Page: 1, Limit: 1}}, false)
+		if err != nil || len(topicsStu) != 1 || metaStu.Total != 2 {
+			t.Fatalf("kotoba student vocabulary sort len=%d total=%d err=%v", len(topicsStu), metaStu.Total, err)
 		}
 	})
 }

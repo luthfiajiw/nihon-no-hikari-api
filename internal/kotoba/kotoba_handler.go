@@ -243,8 +243,8 @@ func (h *Handler) remove(c fiber.Ctx) error {
 }
 
 // upload godoc
-// @Summary Upload cover atau audio ke Supabase private
-// @Description Satu file per permintaan. PNG/JPG maksimal 2 MiB; MP3 maksimal 1 MiB. Preview memakai signed URL selama 15 menit. File yang tidak dipasang ke topik dibersihkan setelah 24 jam.
+// @Summary Upload cover atau audio ke Supabase Storage
+// @Description Satu file per permintaan. PNG/JPG maksimal 2 MiB; MP3 maksimal 1 MiB. Mengembalikan public URL objek. File yang tidak dipasang ke topik dibersihkan setelah 24 jam.
 // @Tags Kotoba Admin
 // @Accept multipart/form-data
 // @Produce json

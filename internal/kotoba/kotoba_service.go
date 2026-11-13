@@ -21,7 +21,7 @@ type Storage interface {
 	Enabled() bool
 	Upload(context.Context, string, string, string, io.Reader) error
 	Delete(context.Context, string, string) error
-	SignedURLs(context.Context, string, []string, time.Duration) (map[string]string, error)
+	PublicURL(bucket, path string) string
 }
 type Operations interface {
 	List(context.Context, Filter, bool) ([]Topic, error)
@@ -42,62 +42,39 @@ func NewService(tx db.WithTx, repo Repository, storage Storage, coverBucket, aud
 	return &Service{tx: tx, repo: repo, storage: storage, coverBucket: coverBucket, audioBucket: audioBucket}
 }
 
-const MediaURLTTL = 15 * time.Minute
+func hasMedia(topics []Topic) bool {
+	for i := range topics {
+		if topics[i].CoverBucket != "" && topics[i].CoverPath != "" {
+			return true
+		}
+		for j := range topics[i].Vocabulary {
+			if topics[i].Vocabulary[j].AudioBucket != "" && topics[i].Vocabulary[j].AudioPath != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
 
-// Repository projections have already enforced topic access before signing.
-// Gather all objects by bucket to avoid one remote request per vocabulary item.
-func (s *Service) present(ctx context.Context, topics []Topic, admin bool) error {
-	groups := map[string][]string{}
+// Repository projections have already enforced topic access before presenting URLs.
+func (s *Service) present(topics []Topic, admin bool) error {
+	if hasMedia(topics) && !s.storage.Enabled() {
+		return ErrUnavailable
+	}
 	for i := range topics {
 		t := &topics[i]
-		t.CoverURL, t.MediaURLsExpiresAt = "", nil
-		if t.CoverBucket != "" && t.CoverPath != "" {
-			groups[t.CoverBucket] = append(groups[t.CoverBucket], t.CoverPath)
-		}
+		t.CoverURL, t.MediaURLsExpiresAt = s.storage.PublicURL(t.CoverBucket, t.CoverPath), nil
 		if !admin {
 			t.IsActive, t.IsVisible, t.Version, t.CoverMediaID = nil, nil, nil, nil
 		}
 		for j := range t.Vocabulary {
 			w := &t.Vocabulary[j]
 			w.AudioURL = nil
-			if w.AudioBucket != "" && w.AudioPath != "" {
-				groups[w.AudioBucket] = append(groups[w.AudioBucket], w.AudioPath)
+			if u := s.storage.PublicURL(w.AudioBucket, w.AudioPath); u != "" {
+				w.AudioURL = &u
 			}
 			if !admin {
 				w.AudioMediaID = nil
-			}
-		}
-	}
-	if len(groups) == 0 {
-		return nil
-	}
-	if !s.storage.Enabled() {
-		return ErrUnavailable
-	}
-	expiresAt := time.Now().UTC().Add(MediaURLTTL)
-	signed := map[string]map[string]string{}
-	for bucket, paths := range groups {
-		urls, err := s.storage.SignedURLs(ctx, bucket, paths, MediaURLTTL)
-		if err != nil {
-			slog.Error("kotoba media signing failed", "bucket", bucket)
-			return ErrStorage
-		}
-		for _, path := range paths {
-			if urls[path] == "" {
-				return ErrStorage
-			}
-		}
-		signed[bucket] = urls
-	}
-	for i := range topics {
-		t := &topics[i]
-		t.CoverURL = signed[t.CoverBucket][t.CoverPath]
-		t.MediaURLsExpiresAt = &expiresAt
-		for j := range t.Vocabulary {
-			w := &t.Vocabulary[j]
-			if w.AudioPath != "" {
-				value := signed[w.AudioBucket][w.AudioPath]
-				w.AudioURL = &value
 			}
 		}
 	}
@@ -114,7 +91,7 @@ func (s *Service) ListPaginated(ctx context.Context, f Filter, admin bool) ([]To
 	if err != nil {
 		return nil, utils.PaginationMeta{}, err
 	}
-	if err := s.present(ctx, topics, admin); err != nil {
+	if err := s.present(topics, admin); err != nil {
 		return nil, utils.PaginationMeta{}, err
 	}
 	meta := utils.BuildPaginationMeta(f.Pagination, total)
@@ -131,7 +108,7 @@ func (s *Service) Detail(ctx context.Context, id uuid.UUID, admin bool) (Topic, 
 		return t, err
 	}
 	topics := []Topic{t}
-	if err := s.present(ctx, topics, admin); err != nil {
+	if err := s.present(topics, admin); err != nil {
 		return Topic{}, err
 	}
 	return topics[0], nil
@@ -221,9 +198,7 @@ func (s *Service) Save(ctx context.Context, id uuid.UUID, in TopicInput) (Topic,
 		return Topic{}, err
 	}
 	topics := []Topic{saved}
-	// The transaction has committed. A signing outage must not report a failed
-	// save and encourage creation of duplicates; the client can refetch URLs.
-	if err := s.present(ctx, topics, true); err != nil {
+	if err := s.present(topics, true); err != nil {
 		slog.Error("kotoba saved without media URLs", "topic_id", saved.ID, "error", err)
 	}
 	return topics[0], nil
@@ -277,15 +252,7 @@ func (s *Service) Upload(ctx context.Context, user uuid.UUID, kind, name, conten
 		return Media{}, err
 	}
 	m.Status = "ready"
-	expiresAt := time.Now().UTC().Add(MediaURLTTL)
-	urls, err := s.storage.SignedURLs(ctx, m.Bucket, []string{m.ObjectPath}, MediaURLTTL)
-	if err != nil || urls[m.ObjectPath] == "" {
-		// The object is already uploaded; retain the successful media ID so it
-		// can still be attached and its preview refreshed via topic detail.
-		slog.Error("kotoba uploaded without preview URL", "media_id", m.ID)
-	} else {
-		m.URL, m.URLExpiresAt = urls[m.ObjectPath], &expiresAt
-	}
+	m.URL = s.storage.PublicURL(m.Bucket, m.ObjectPath)
 	return m, nil
 }
 

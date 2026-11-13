@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +17,7 @@ import (
 
 // Opt in explicitly: this test creates and removes only UUID-scoped test objects.
 // It never provisions buckets, changes bucket settings, or edits existing objects.
-func TestLivePrivateStorage(t *testing.T) {
+func TestLivePublicStorage(t *testing.T) {
 	if os.Getenv("SUPABASE_STORAGE_LIVE_TEST") != "1" {
 		t.Skip("set SUPABASE_STORAGE_LIVE_TEST=1 to verify configured Supabase buckets")
 	}
@@ -67,37 +66,21 @@ func TestLivePrivateStorage(t *testing.T) {
 			if err := client.Upload(ctx, sample.bucket, path, sample.mime, bytes.NewReader(sample.data)); err != nil {
 				t.Fatalf("%s upload failed: %v", sample.name, err)
 			}
-			urls, err := client.SignedURLs(ctx, sample.bucket, []string{path}, 15*time.Minute)
+			publicURL := client.PublicURL(sample.bucket, path)
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, publicURL, nil)
 			if err != nil {
-				t.Fatalf("%s signing failed: %v", sample.name, err)
-			}
-			request, err := http.NewRequestWithContext(ctx, http.MethodGet, urls[path], nil)
-			if err != nil {
-				t.Fatal("cannot create signed download request")
+				t.Fatal("cannot create public download request")
 			}
 			response, err := reader.Do(request)
 			if err != nil {
-				t.Fatal("signed download could not connect")
+				t.Fatal("public download could not connect")
 			}
 			content, readErr := io.ReadAll(io.LimitReader(response.Body, int64(len(sample.data))+1))
 			response.Body.Close()
 			if readErr != nil || response.StatusCode != http.StatusOK || !bytes.Equal(content, sample.data) {
-				t.Fatalf("%s signed download did not return the original bytes (HTTP %d)", sample.name, response.StatusCode)
+				t.Fatalf("%s public download did not return the original bytes (HTTP %d)", sample.name, response.StatusCode)
 			}
-			public := strings.TrimRight(os.Getenv("SUPABASE_URL"), "/") + "/storage/v1/object/public/" + escapedPath(sample.bucket, path)
-			request, err = http.NewRequestWithContext(ctx, http.MethodGet, public, nil)
-			if err != nil {
-				t.Fatal("cannot create unsigned access check")
-			}
-			response, err = reader.Do(request)
-			if err != nil {
-				t.Fatal("unsigned access check could not connect")
-			}
-			response.Body.Close()
-			if response.StatusCode < 400 {
-				t.Fatalf("%s bucket permits permanent public access", sample.name)
-			}
-			t.Log("upload, signed download, byte comparison, and denied public access verified")
+			t.Log("upload, public download, and byte comparison verified")
 		})
 	}
 }

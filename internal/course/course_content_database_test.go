@@ -266,4 +266,27 @@ func TestAdminContentDatabase(t *testing.T) {
 		testdb.Migrate(t, pool, 18, "down")
 		testdb.Migrate(t, pool, 18, "up")
 	})
+
+	t.Run("paginated total and out-of-range fallback", func(t *testing.T) {
+		p1 := model.AdminListFilter{Pagination: utils.PaginationParams{Paginated: true, Page: 1, Limit: 1}}
+		pOut := model.AdminListFilter{Pagination: utils.PaginationParams{Paginated: true, Page: 99, Limit: 10}}
+
+		courses1, totalCourses, err := repository.ListContentPaginated(ctx, "course", p1)
+		if err != nil || len(courses1) != 1 || totalCourses < 1 {
+			t.Fatalf("courses p1 len=%d total=%d err=%v", len(courses1), totalCourses, err)
+		}
+		coursesOut, totalCoursesOut, err := repository.ListContentPaginated(ctx, "course", pOut)
+		if err != nil || len(coursesOut) != 0 || totalCoursesOut != totalCourses {
+			t.Fatalf("courses out-of-range len=%d total=%d want=%d err=%v", len(coursesOut), totalCoursesOut, totalCourses, err)
+		}
+
+		levels1, totalLevels, err := repository.LevelsPaginated(ctx, p1)
+		if err != nil || len(levels1) != 1 || totalLevels < 1 {
+			t.Fatalf("levels p1 len=%d total=%d err=%v", len(levels1), totalLevels, err)
+		}
+		levelsOut, totalLevelsOut, err := repository.LevelsPaginated(ctx, pOut)
+		if err != nil || len(levelsOut) != 0 || totalLevelsOut != totalLevels {
+			t.Fatalf("levels out-of-range len=%d total=%d want=%d err=%v", len(levelsOut), totalLevelsOut, totalLevels, err)
+		}
+	})
 }

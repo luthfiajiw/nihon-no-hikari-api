@@ -7,6 +7,7 @@ import (
 	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 )
 
 type Handler struct {
@@ -275,6 +276,10 @@ func (h *Handler) signout(c fiber.Ctx) error {
 			Success: false,
 			Error:   err.Error(),
 		})
+	}
+
+	if sid, err := uuid.Parse(req.ID); err == nil {
+		h.middleware.InvalidateSession(sid)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(utils.SuccessRes{

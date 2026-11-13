@@ -40,6 +40,9 @@ func (routeAuth) RequireRole(role string) fiber.Handler {
 	}
 }
 
+func (routeAuth) InvalidateSession(uuid.UUID) {}
+func (routeAuth) InvalidateUser(uuid.UUID)    {}
+
 type courseRoutesService struct{ course.Service }
 
 func (courseRoutesService) ListAdminContent(_ context.Context, kind string) (model.ContentListResponse, error) {

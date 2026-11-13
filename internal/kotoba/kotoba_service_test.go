@@ -13,10 +13,9 @@ import (
 )
 
 type memoryStorage struct {
-	enabled                       bool
-	uploadErr, deleteErr, signErr error
-	uploads, deletes              []string
-	signCalls                     int
+	enabled              bool
+	uploadErr, deleteErr error
+	uploads, deletes     []string
 }
 
 func (s *memoryStorage) Enabled() bool { return s.enabled }
@@ -29,16 +28,11 @@ func (s *memoryStorage) Delete(ctx context.Context, bucket, path string) error {
 	s.deletes = append(s.deletes, bucket+"/"+path)
 	return s.deleteErr
 }
-func (s *memoryStorage) SignedURLs(ctx context.Context, bucket string, paths []string, ttl time.Duration) (map[string]string, error) {
-	s.signCalls++
-	if s.signErr != nil {
-		return nil, s.signErr
+func (s *memoryStorage) PublicURL(bucket, path string) string {
+	if bucket == "" || path == "" {
+		return ""
 	}
-	urls := map[string]string{}
-	for _, path := range paths {
-		urls[path] = "https://storage.test/object/sign/" + bucket + "/" + path + "?token=temporary"
-	}
-	return urls, nil
+	return "https://storage.test/storage/v1/object/public/" + bucket + "/" + path
 }
 
 type transactionStub struct{ err error }
@@ -223,70 +217,40 @@ func TestStudentProjection(t *testing.T) {
 	topic := Topic{CoverMediaID: &id, IsActive: &active, IsVisible: &visible, Version: &version, CoverBucket: "covers", CoverPath: "id.png", Vocabulary: []Vocabulary{{AudioMediaID: &id, AudioBucket: "audio", AudioPath: "id.mp3"}}}
 	svc := NewService(nil, nil, &memoryStorage{enabled: true}, "covers", "audio")
 	topics := []Topic{topic}
-	if err := svc.present(context.Background(), topics, false); err != nil {
+	if err := svc.present(topics, false); err != nil {
 		t.Fatal(err)
 	}
 	topic = topics[0]
 	if topic.CoverMediaID != nil || topic.IsActive != nil || topic.IsVisible != nil || topic.Version != nil || topic.Vocabulary[0].AudioMediaID != nil {
 		t.Fatal("admin metadata leaked to student")
 	}
-	if topic.CoverURL == "" || topic.Vocabulary[0].AudioURL == nil {
-		t.Fatal("missing playback URLs")
+	if topic.CoverURL != "https://storage.test/storage/v1/object/public/covers/id.png" {
+		t.Fatalf("unexpected cover public URL: %s", topic.CoverURL)
 	}
-	if topic.MediaURLsExpiresAt == nil || time.Until(*topic.MediaURLsExpiresAt) > MediaURLTTL {
-		t.Fatal("missing signed URL expiry")
+	if topic.Vocabulary[0].AudioURL == nil || *topic.Vocabulary[0].AudioURL != "https://storage.test/storage/v1/object/public/audio/id.mp3" {
+		t.Fatalf("unexpected audio public URL: %v", topic.Vocabulary[0].AudioURL)
+	}
+	if topic.MediaURLsExpiresAt != nil {
+		t.Fatal("public URLs must not advertise expiry")
 	}
 }
 
-func TestSigningFailureDoesNotUndoCommittedMutation(t *testing.T) {
-	storage := &memoryStorage{enabled: true, signErr: errors.New("signing unavailable")}
-	repo := &repositoryStub{}
-	svc := NewService(transactionStub{}, repo, storage, "covers", "audio")
-	media, err := svc.Upload(context.Background(), uuid.New(), "cover", "cover.png", "image/png", bytes.NewReader(pngFixture(t)))
-	if err != nil || media.ID == uuid.Nil || media.Status != "ready" || media.URL != "" || media.URLExpiresAt != nil {
-		t.Fatal("uploaded media must retain its successful ID when signing fails")
-	}
-	in := validInput()
-	version := int64(1)
-	repo.medias = map[uuid.UUID]Media{in.CoverMediaID: {Kind: "cover", Status: "ready"}}
-	repo.topic = Topic{ID: uuid.New(), Version: &version, CoverMediaID: &in.CoverMediaID, CoverBucket: "covers", CoverPath: "saved.png"}
-	saved, err := svc.Save(context.Background(), uuid.Nil, in)
-	if err != nil || !repo.saved || saved.Version == nil || *saved.Version != 1 || saved.CoverURL != "" || saved.MediaURLsExpiresAt != nil {
-		t.Fatal("a committed save must not be reported as failed when signing fails")
-	}
+func TestPresentRequiresStorageWhenMediaExists(t *testing.T) {
+	svc := NewService(nil, nil, &memoryStorage{enabled: false}, "covers", "audio")
 	topics := []Topic{{CoverBucket: "covers", CoverPath: "id.png"}}
-	if err := svc.present(context.Background(), topics, false); !errors.Is(err, ErrStorage) {
-		t.Fatal("read should report signing failure")
+	if err := svc.present(topics, false); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("expected ErrUnavailable when storage disabled, got %v", err)
 	}
-	storage.enabled = false
-	if err := svc.present(context.Background(), topics, false); !errors.Is(err, ErrUnavailable) {
-		t.Fatal("private reads need signing credentials")
+	if err := svc.present([]Topic{{Title: "no media"}}, false); err != nil {
+		t.Fatalf("topics without media must not require storage: %v", err)
 	}
 }
 
-func TestUnavailableTopicDoesNotSignMedia(t *testing.T) {
+func TestUnavailableTopicChecksAccessFirst(t *testing.T) {
 	storage := &memoryStorage{enabled: true}
 	repo := &repositoryStub{getErr: ErrNotFound}
 	svc := NewService(nil, repo, storage, "covers", "audio")
-	if _, err := svc.Detail(context.Background(), uuid.New(), false); !errors.Is(err, ErrNotFound) || storage.signCalls != 0 {
-		t.Fatal("access must be checked before signing")
-	}
-}
-
-func TestSigningUsesBucketBatches(t *testing.T) {
-	storage := &memoryStorage{enabled: true}
-	svc := NewService(nil, nil, storage, "covers", "audio")
-	topics := []Topic{
-		{CoverBucket: "covers", CoverPath: "first.png", Vocabulary: []Vocabulary{{AudioBucket: "audio", AudioPath: "shared.mp3"}, {AudioBucket: "audio", AudioPath: "shared.mp3"}}},
-		{CoverBucket: "covers", CoverPath: "second.png"},
-	}
-	if err := svc.present(context.Background(), topics, true); err != nil {
-		t.Fatal(err)
-	}
-	if storage.signCalls != 2 {
-		t.Fatal("URLs must be signed by bucket, not one request per object")
-	}
-	if *topics[0].Vocabulary[0].AudioURL != *topics[0].Vocabulary[1].AudioURL {
-		t.Fatal("shared audio should share its signed URL")
+	if _, err := svc.Detail(context.Background(), uuid.New(), false); !errors.Is(err, ErrNotFound) {
+		t.Fatal("access must be checked before presenting")
 	}
 }

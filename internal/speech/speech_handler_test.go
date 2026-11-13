@@ -37,6 +37,8 @@ func (a testAuth) AuthMiddleware() fiber.Handler {
 	}
 }
 func (a testAuth) RequireRole(string) fiber.Handler { return a.AuthMiddleware() }
+func (a testAuth) InvalidateSession(uuid.UUID)    {}
+func (a testAuth) InvalidateUser(uuid.UUID)       {}
 
 type roundTrip func(*http.Request) (*http.Response, error)
 

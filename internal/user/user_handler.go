@@ -333,6 +333,7 @@ func (h *Handler) revokeOtherSessions(c fiber.Ctx) error {
 	if err := h.service.RevokeOtherSessions(c.Context(), userID, sessionID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal mencabut sesi lain"})
 	}
+	h.middleware.InvalidateUser(userID)
 
 	return c.JSON(utils.SuccessRes{Success: true, Message: "seluruh sesi lain berhasil dicabut"})
 }
@@ -372,13 +373,7 @@ func (h *Handler) list(c fiber.Ctx) error {
 		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-	var total int
-	countQuery := "SELECT count(*) FROM users" + whereSQL
-	if err := h.pool.QueryRow(c.Context(), countQuery, args...).Scan(&total); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal mengambil daftar pengguna"})
-	}
-
-	query := "SELECT id, email, display_name, role FROM users" + whereSQL + " ORDER BY created_at, id"
+	query := "SELECT id, email, display_name, role, count(*) OVER() FROM users" + whereSQL + " ORDER BY created_at, id"
 	if p.Paginated {
 		query += fmt.Sprintf(" LIMIT %d OFFSET %d", p.Limit, p.Offset())
 	}
@@ -390,15 +385,22 @@ func (h *Handler) list(c fiber.Ctx) error {
 	defer rows.Close()
 
 	users := make([]Summary, 0)
+	var total int
 	for rows.Next() {
 		var item Summary
-		if err := rows.Scan(&item.ID, &item.Email, &item.DisplayName, &item.Role); err != nil {
+		if err := rows.Scan(&item.ID, &item.Email, &item.DisplayName, &item.Role, &total); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal membaca pengguna"})
 		}
 		users = append(users, item)
 	}
 	if rows.Err() != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal membaca pengguna"})
+	}
+	if len(users) == 0 && p.Paginated && p.Offset() > 0 {
+		countQuery := "SELECT count(*) FROM users" + whereSQL
+		if err := h.pool.QueryRow(c.Context(), countQuery, args...).Scan(&total); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal mengambil daftar pengguna"})
+		}
 	}
 	meta := utils.BuildPaginationMeta(p, total)
 	return c.JSON(ListUsersResponse{Success: true, Data: users, Meta: &meta})
@@ -442,5 +444,6 @@ func (h *Handler) changeRole(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal mengubah role"})
 	}
+	h.middleware.InvalidateUser(userID)
 	return c.JSON(fiber.Map{"success": true, "data": user})
 }

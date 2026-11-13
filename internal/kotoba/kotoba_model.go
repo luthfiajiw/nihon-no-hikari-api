@@ -115,7 +115,7 @@ type Topic struct {
 	IsVisible          *bool        `json:"is_visible,omitempty"`
 	CoverMediaID       *uuid.UUID   `json:"cover_media_id,omitempty"`
 	CoverURL           string       `json:"cover_url"`
-	MediaURLsExpiresAt *time.Time   `json:"media_urls_expires_at,omitempty"`
+	MediaURLsExpiresAt *time.Time   `json:"media_urls_expires_at,omitempty"` // Deprecated: always omitted for public bucket URLs.
 	Version            *int64       `json:"version,omitempty"`
 	VocabularyCount    int          `json:"vocabulary_count"`
 	ExerciseCount      int          `json:"exercise_count"`
@@ -129,7 +129,7 @@ type Media struct {
 	ID           uuid.UUID  `json:"id"`
 	Kind         string     `json:"kind"`
 	URL          string     `json:"url"`
-	URLExpiresAt *time.Time `json:"url_expires_at,omitempty"`
+	URLExpiresAt *time.Time `json:"url_expires_at,omitempty"` // Deprecated: always omitted for public bucket URLs.
 	MIMEType     string     `json:"mime_type"`
 	SizeBytes    int64      `json:"size_bytes"`
 	Bucket       string     `json:"-"`

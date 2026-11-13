@@ -6,6 +6,7 @@ import (
 
 	"nihon-no-hikari-api/internal/testdb"
 	"nihon-no-hikari-api/pkg/db"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 )
@@ -68,6 +69,29 @@ func TestQuestionSetPublishDatabase(t *testing.T) {
 		}
 		if n := count(t, `SELECT count(*) FROM admin_drafts WHERE resource_id=$1`, setID); n != 0 {
 			t.Fatal("original draft was not deleted")
+		}
+	})
+
+	t.Run("paginated total and out-of-range fallback", func(t *testing.T) {
+		p1 := utils.PaginationParams{Paginated: true, Page: 1, Limit: 1}
+		pOut := utils.PaginationParams{Paginated: true, Page: 99, Limit: 10}
+
+		sets1, totalSets, err := repository.ListQuestionSetsPaginated(ctx, QuestionSetFilter{Pagination: p1})
+		if err != nil || len(sets1) != 1 || totalSets < 1 {
+			t.Fatalf("sets p1 len=%d total=%d err=%v", len(sets1), totalSets, err)
+		}
+		setsOut, totalSetsOut, err := repository.ListQuestionSetsPaginated(ctx, QuestionSetFilter{Pagination: pOut})
+		if err != nil || len(setsOut) != 0 || totalSetsOut != totalSets {
+			t.Fatalf("sets out-of-range len=%d total=%d want=%d err=%v", len(setsOut), totalSetsOut, totalSets, err)
+		}
+
+		tpl1, totalTpl, err := repository.TemplatesPaginated(ctx, TemplateFilter{Pagination: p1})
+		if err != nil || len(tpl1) != 1 || totalTpl < 1 {
+			t.Fatalf("templates p1 len=%d total=%d err=%v", len(tpl1), totalTpl, err)
+		}
+		tplOut, totalTplOut, err := repository.TemplatesPaginated(ctx, TemplateFilter{Pagination: pOut})
+		if err != nil || len(tplOut) != 0 || totalTplOut != totalTpl {
+			t.Fatalf("templates out-of-range len=%d total=%d want=%d err=%v", len(tplOut), totalTplOut, totalTpl, err)
 		}
 	})
 }

@@ -111,6 +111,24 @@ func (r *dbRepository) rows(ctx context.Context, query string, args ...any) ([]j
 	return items, rows.Err()
 }
 
+// rowsWithTotal scans (jsonb, bigint total) rows produced by count(*) OVER().
+func (r *dbRepository) rowsWithTotal(ctx context.Context, query string, args ...any) ([]json.RawMessage, int, error) {
+	rows, err := r.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	items, total := make([]json.RawMessage, 0), 0
+	for rows.Next() {
+		var item json.RawMessage
+		if err := rows.Scan(&item, &total); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, item)
+	}
+	return items, total, rows.Err()
+}
+
 func decodeRecords[T any](items []json.RawMessage) ([]T, error) {
 	result := make([]T, 0, len(items))
 	for _, raw := range items {
@@ -169,19 +187,17 @@ func (r *dbRepository) ListQuestionSetsPaginated(ctx context.Context, filter Que
 		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-	var total int
-	countQuery := "SELECT count(*) FROM public.question_sets t" + whereSQL
-	if err := r.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
-
 	projection := "to_jsonb(t) - 'content'"
-	query := fmt.Sprintf("SELECT %s FROM public.question_sets t%s ORDER BY t.order_index,t.created_at,t.id", projection, whereSQL)
+	query := fmt.Sprintf("SELECT %s, count(*) OVER() FROM public.question_sets t%s ORDER BY t.order_index,t.created_at,t.id", projection, whereSQL)
 	if filter.Pagination.Paginated {
 		query += fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Pagination.Limit, filter.Pagination.Offset())
 	}
 
-	items, err := r.rows(ctx, query, args...)
+	items, total, err := r.rowsWithTotal(ctx, query, args...)
+	if err == nil && len(items) == 0 && filter.Pagination.Paginated && filter.Pagination.Offset() > 0 {
+		countQuery := "SELECT count(*) FROM public.question_sets t" + whereSQL
+		err = r.QueryRow(ctx, countQuery, args...).Scan(&total)
+	}
 	return items, total, err
 }
 
@@ -320,18 +336,16 @@ func (r *dbRepository) TemplatesPaginated(ctx context.Context, filter TemplateFi
 		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-	var total int
-	countQuery := "SELECT count(*) FROM public.kana_stroke_templates" + whereSQL
-	if err := r.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
-
-	query := "SELECT jsonb_build_object('id',id,'character',character,'romaji',romaji,'script',script,'source_version',source_version,'stroke_count',jsonb_array_length(stroke_data->'strokes')) FROM public.kana_stroke_templates" + whereSQL + " ORDER BY script,character,source_version DESC"
+	query := "SELECT jsonb_build_object('id',id,'character',character,'romaji',romaji,'script',script,'source_version',source_version,'stroke_count',jsonb_array_length(stroke_data->'strokes')), count(*) OVER() FROM public.kana_stroke_templates" + whereSQL + " ORDER BY script,character,source_version DESC"
 	if filter.Pagination.Paginated {
 		query += fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Pagination.Limit, filter.Pagination.Offset())
 	}
 
-	items, err := r.rows(ctx, query, args...)
+	items, total, err := r.rowsWithTotal(ctx, query, args...)
+	if err == nil && len(items) == 0 && filter.Pagination.Paginated && filter.Pagination.Offset() > 0 {
+		countQuery := "SELECT count(*) FROM public.kana_stroke_templates" + whereSQL
+		err = r.QueryRow(ctx, countQuery, args...).Scan(&total)
+	}
 	if err != nil {
 		return nil, 0, err
 	}

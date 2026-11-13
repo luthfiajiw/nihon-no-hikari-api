@@ -3,6 +3,7 @@ package course
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/utils"
@@ -87,7 +88,12 @@ func (h *Handler) catalog(c fiber.Ctx) error {
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/levels [get]
 func (h *Handler) levels(c fiber.Ctx) error {
-	response, err := h.service.AdminLevels(c.Context())
+	p := utils.ParsePaginationParams(c)
+	priceType := strings.TrimSpace(c.Query("price_type"))
+	response, err := h.service.AdminLevelsPaginated(c.Context(), model.AdminListFilter{
+		Pagination: p,
+		PriceType:  priceType,
+	})
 	if err != nil {
 		return serverError(c, err)
 	}
@@ -301,7 +307,14 @@ func (h *Handler) preview(c fiber.Ctx) error {
 // @Router /admin/modules [get]
 // @Router /admin/lessons [get]
 func (h *Handler) adminList(c fiber.Ctx, kind string) error {
-	response, err := h.service.ListAdminContent(c.Context(), kind)
+	p := utils.ParsePaginationParams(c)
+	status := strings.TrimSpace(c.Query("status"))
+	level := strings.TrimSpace(c.Query("level"))
+	response, err := h.service.ListAdminContentPaginated(c.Context(), kind, model.AdminListFilter{
+		Pagination: p,
+		Status:     status,
+		Level:      level,
+	})
 	if err != nil {
 		return serverError(c, err)
 	}

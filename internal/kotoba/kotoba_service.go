@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"nihon-no-hikari-api/pkg/db"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -24,6 +25,7 @@ type Storage interface {
 }
 type Operations interface {
 	List(context.Context, Filter, bool) ([]Topic, error)
+	ListPaginated(context.Context, Filter, bool) ([]Topic, utils.PaginationMeta, error)
 	Detail(context.Context, uuid.UUID, bool) (Topic, error)
 	Save(context.Context, uuid.UUID, TopicInput) (Topic, error)
 	Delete(context.Context, uuid.UUID) error
@@ -101,18 +103,27 @@ func (s *Service) present(ctx context.Context, topics []Topic, admin bool) error
 	}
 	return nil
 }
-func (s *Service) List(ctx context.Context, f Filter, admin bool) ([]Topic, error) {
-	if err := f.Validate(admin); err != nil {
-		return nil, err
+func (s *Service) ListPaginated(ctx context.Context, f Filter, admin bool) ([]Topic, utils.PaginationMeta, error) {
+	if f.Search == "" && f.Pagination.Search != "" {
+		f.Search = f.Pagination.Search
 	}
-	topics, err := s.repo.List(ctx, f, admin)
+	if err := f.Validate(admin); err != nil {
+		return nil, utils.PaginationMeta{}, err
+	}
+	topics, total, err := s.repo.ListPaginated(ctx, f, admin)
 	if err != nil {
-		return nil, err
+		return nil, utils.PaginationMeta{}, err
 	}
 	if err := s.present(ctx, topics, admin); err != nil {
-		return nil, err
+		return nil, utils.PaginationMeta{}, err
 	}
-	return topics, nil
+	meta := utils.BuildPaginationMeta(f.Pagination, total)
+	return topics, meta, nil
+}
+
+func (s *Service) List(ctx context.Context, f Filter, admin bool) ([]Topic, error) {
+	topics, _, err := s.ListPaginated(ctx, f, admin)
+	return topics, err
 }
 func (s *Service) Detail(ctx context.Context, id uuid.UUID, admin bool) (Topic, error) {
 	t, err := s.repo.Get(ctx, id, admin)

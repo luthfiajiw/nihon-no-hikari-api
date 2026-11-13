@@ -81,15 +81,26 @@ func parseInput(c fiber.Ctx) (TopicInput, error) {
 }
 func (h *Handler) list(c fiber.Ctx, admin bool) error {
 	c.Set("Cache-Control", "no-store")
-	f := Filter{Level: c.Query("level"), Search: c.Query("search"), Status: c.Query("status"), Sort: c.Query("sort")}
+	pagination := utils.ParsePaginationParams(c)
+	f := Filter{
+		Level:      c.Query("level"),
+		Category:   c.Query("category"),
+		Search:     c.Query("search"),
+		Status:     c.Query("status"),
+		Sort:       c.Query("sort"),
+		Pagination: pagination,
+	}
+	if f.Search == "" && pagination.Search != "" {
+		f.Search = pagination.Search
+	}
 	if err := f.Validate(admin); err != nil {
 		return respondError(c, err)
 	}
-	topics, err := h.service.List(c.Context(), f, admin)
+	topics, meta, err := h.service.ListPaginated(c.Context(), f, admin)
 	if err != nil {
 		return respondError(c, err)
 	}
-	return c.JSON(TopicsResponse{Success: true, Data: topics})
+	return c.JSON(TopicsResponse{Success: true, Data: topics, Meta: &meta})
 }
 func (h *Handler) detail(c fiber.Ctx, admin bool) error {
 	c.Set("Cache-Control", "no-store")

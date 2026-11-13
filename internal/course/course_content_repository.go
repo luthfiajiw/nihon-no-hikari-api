@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/db"
@@ -17,12 +18,14 @@ import (
 type ContentRepository interface {
 	Catalog(context.Context, *uuid.UUID) (model.CatalogData, error)
 	Levels(context.Context) ([]model.Level, error)
+	LevelsPaginated(context.Context, model.AdminListFilter) ([]model.Level, int, error)
 	Level(context.Context, uuid.UUID) (model.Level, error)
 	CreateLevel(context.Context, uuid.UUID, model.LevelInput) (model.Level, error)
 	UpdateLevel(context.Context, uuid.UUID, model.LevelInput) (model.Level, error)
 	DeleteLevel(context.Context, uuid.UUID) error
 	UpdateLevelPrice(context.Context, uuid.UUID, int32) (model.Level, error)
 	ListContent(context.Context, string) ([]json.RawMessage, error)
+	ListContentPaginated(context.Context, string, model.AdminListFilter) ([]json.RawMessage, int, error)
 	Content(context.Context, string, uuid.UUID) (json.RawMessage, error)
 	ContentState(context.Context, string, uuid.UUID) (model.ContentState, error)
 	Draft(context.Context, string, uuid.UUID) (json.RawMessage, error)
@@ -138,6 +141,65 @@ func (r *dbRepository) ListContent(ctx context.Context, kind string) ([]json.Raw
 		projection = `to_jsonb(t) || jsonb_build_object('module_count',(SELECT count(*) FROM modules m WHERE m.course_id=t.id),'lesson_count',(SELECT count(*) FROM lessons l JOIN modules m ON m.id=l.module_id WHERE m.course_id=t.id))`
 	}
 	return r.rows(ctx, fmt.Sprintf(`SELECT %s FROM public.%s t ORDER BY t.order_index,t.created_at,t.id`, projection, name))
+}
+
+func (r *dbRepository) ListContentPaginated(ctx context.Context, kind string, filter model.AdminListFilter) ([]json.RawMessage, int, error) {
+	name, ok := table(kind)
+	if !ok {
+		return nil, 0, inputMessage("jenis konten tidak valid")
+	}
+	projection := "to_jsonb(t) - 'content'"
+	if name == "courses" {
+		projection = `to_jsonb(t) || jsonb_build_object('level_code',(SELECT lv.code FROM levels lv WHERE lv.id=t.level_id),'module_count',(SELECT count(*) FROM modules m WHERE m.course_id=t.id),'lesson_count',(SELECT count(*) FROM lessons l JOIN modules m ON m.id=l.module_id WHERE m.course_id=t.id))`
+	}
+
+	var whereClauses []string
+	var args []any
+	argIndex := 1
+
+	if filter.Pagination.Search != "" {
+		if name == "courses" || name == "modules" {
+			whereClauses = append(whereClauses, fmt.Sprintf("(strpos(lower(t.title || ' ' || t.slug || ' ' || coalesce(t.description, '')), lower($%d)) > 0)", argIndex))
+		} else {
+			whereClauses = append(whereClauses, fmt.Sprintf("(strpos(lower(t.title || ' ' || t.slug), lower($%d)) > 0)", argIndex))
+		}
+		args = append(args, filter.Pagination.Search)
+		argIndex++
+	}
+
+	if name == "courses" && filter.Level != "" && !strings.EqualFold(filter.Level, "all") {
+		whereClauses = append(whereClauses, fmt.Sprintf("(t.level_id::text = $%d OR EXISTS (SELECT 1 FROM public.levels lv WHERE lv.id = t.level_id AND lower(lv.code) = lower($%d)))", argIndex, argIndex))
+		args = append(args, filter.Level)
+		argIndex++
+	}
+
+	switch filter.Status {
+	case "published":
+		whereClauses = append(whereClauses, "t.is_published = true AND t.archived_at IS NULL")
+	case "draft":
+		whereClauses = append(whereClauses, "t.is_published = false AND t.archived_at IS NULL")
+	case "archived":
+		whereClauses = append(whereClauses, "t.archived_at IS NOT NULL")
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	var total int
+	countQuery := fmt.Sprintf("SELECT count(*) FROM public.%s t%s", name, whereSQL)
+	if err := r.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := fmt.Sprintf("SELECT %s FROM public.%s t%s ORDER BY t.order_index,t.created_at,t.id", projection, name, whereSQL)
+	if filter.Pagination.Paginated {
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Pagination.Limit, filter.Pagination.Offset())
+	}
+
+	items, err := r.rows(ctx, query, args...)
+	return items, total, err
 }
 
 func (r *dbRepository) Content(ctx context.Context, kind string, id uuid.UUID) (json.RawMessage, error) {
@@ -297,6 +359,56 @@ func (r *dbRepository) Levels(ctx context.Context) ([]model.Level, error) {
 		}
 	}
 	return levels, nil
+}
+
+func (r *dbRepository) LevelsPaginated(ctx context.Context, filter model.AdminListFilter) ([]model.Level, int, error) {
+	var whereClauses []string
+	var args []any
+	argIndex := 1
+
+	if filter.Pagination.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("(strpos(lower(code || ' ' || name || ' ' || coalesce(description, '') || ' ' || coalesce(tag, '')), lower($%d)) > 0)", argIndex))
+		args = append(args, filter.Pagination.Search)
+		argIndex++
+	}
+
+	switch strings.ToLower(filter.PriceType) {
+	case "free":
+		whereClauses = append(whereClauses, "price = 0")
+	case "paid":
+		whereClauses = append(whereClauses, "price > 0")
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	var total int
+	countQuery := "SELECT count(*) FROM public.levels" + whereSQL
+	if err := r.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := "SELECT to_jsonb(t) FROM public.levels t" + whereSQL + " ORDER BY order_index"
+	if filter.Pagination.Paginated {
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Pagination.Limit, filter.Pagination.Offset())
+	}
+
+	items, err := r.rows(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	levels, err := decodeRecords[model.Level](items)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range levels {
+		if levels[i].Points == nil {
+			levels[i].Points = []string{}
+		}
+	}
+	return levels, total, nil
 }
 
 func (r *dbRepository) Level(ctx context.Context, id uuid.UUID) (model.Level, error) {

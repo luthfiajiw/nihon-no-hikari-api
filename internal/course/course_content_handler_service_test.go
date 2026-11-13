@@ -19,16 +19,35 @@ import (
 
 type contentHandlerServiceStub struct {
 	Service
-	list        func(context.Context, string) (model.ContentListResponse, error)
-	create      func(context.Context, string, model.CoreInput) (model.CreateResponse, error)
-	levelDetail func(context.Context, uuid.UUID) (model.LevelResponse, error)
-	createLevel func(context.Context, model.LevelInput) (model.LevelResponse, error)
-	updateLevel func(context.Context, uuid.UUID, model.LevelInput) (model.LevelResponse, error)
-	deleteLevel func(context.Context, uuid.UUID) (model.StatusResponse, error)
+	list            func(context.Context, string) (model.ContentListResponse, error)
+	listPaginated   func(context.Context, string, model.AdminListFilter) (model.ContentListResponse, error)
+	levelsPaginated func(context.Context, model.AdminListFilter) (model.LevelsResponse, error)
+	create          func(context.Context, string, model.CoreInput) (model.CreateResponse, error)
+	levelDetail     func(context.Context, uuid.UUID) (model.LevelResponse, error)
+	createLevel     func(context.Context, model.LevelInput) (model.LevelResponse, error)
+	updateLevel     func(context.Context, uuid.UUID, model.LevelInput) (model.LevelResponse, error)
+	deleteLevel     func(context.Context, uuid.UUID) (model.StatusResponse, error)
 }
 
 func (s *contentHandlerServiceStub) ListAdminContent(c context.Context, k string) (model.ContentListResponse, error) {
 	return s.list(c, k)
+}
+
+func (s *contentHandlerServiceStub) ListAdminContentPaginated(c context.Context, k string, filter model.AdminListFilter) (model.ContentListResponse, error) {
+	if s.listPaginated != nil {
+		return s.listPaginated(c, k, filter)
+	}
+	if s.list != nil {
+		return s.list(c, k)
+	}
+	return model.ContentListResponse{}, nil
+}
+
+func (s *contentHandlerServiceStub) AdminLevelsPaginated(c context.Context, filter model.AdminListFilter) (model.LevelsResponse, error) {
+	if s.levelsPaginated != nil {
+		return s.levelsPaginated(c, filter)
+	}
+	return model.LevelsResponse{}, nil
 }
 
 func (s *contentHandlerServiceStub) CreateAdminContent(c context.Context, k string, v model.CoreInput) (model.CreateResponse, error) {
@@ -231,5 +250,43 @@ func TestLevelHandlerEndpoints(t *testing.T) {
 	res, err = app.Test(req)
 	if err != nil || res.StatusCode != 200 {
 		t.Fatalf("delete failed %v %v", err, res.StatusCode)
+	}
+}
+
+func TestAdminListAndLevelsFilterForwarding(t *testing.T) {
+	var gotCourseFilter model.AdminListFilter
+	var gotLevelFilter model.AdminListFilter
+	stub := &contentHandlerServiceStub{
+		listPaginated: func(_ context.Context, kind string, filter model.AdminListFilter) (model.ContentListResponse, error) {
+			if kind != "course" {
+				t.Fatalf("unexpected kind %s", kind)
+			}
+			gotCourseFilter = filter
+			return model.ContentListResponse{Success: true, Data: []json.RawMessage{}}, nil
+		},
+		levelsPaginated: func(_ context.Context, filter model.AdminListFilter) (model.LevelsResponse, error) {
+			gotLevelFilter = filter
+			return model.LevelsResponse{Success: true, Data: []model.Level{}}, nil
+		},
+	}
+	h := NewHandler(stub, nil)
+	app := fiber.New()
+	app.Get("/courses", func(c fiber.Ctx) error { return h.adminList(c, "course") })
+	app.Get("/levels", h.levels)
+
+	res, err := app.Test(httptest.NewRequest("GET", "/courses?status=published&level=%20N5%20", nil))
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("courses failed: err=%v status=%v", err, res.StatusCode)
+	}
+	if gotCourseFilter.Status != "published" || gotCourseFilter.Level != "N5" {
+		t.Fatalf("unexpected course filter: %+v", gotCourseFilter)
+	}
+
+	res, err = app.Test(httptest.NewRequest("GET", "/levels?price_type=%20paid%20", nil))
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("levels failed: err=%v status=%v", err, res.StatusCode)
+	}
+	if gotLevelFilter.PriceType != "paid" {
+		t.Fatalf("unexpected level filter: %+v", gotLevelFilter)
 	}
 }

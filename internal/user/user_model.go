@@ -3,6 +3,8 @@ package user
 import (
 	"time"
 
+	"nihon-no-hikari-api/pkg/utils"
+
 	"github.com/google/uuid"
 )
 
@@ -45,8 +47,9 @@ type ChangeRoleRequest struct {
 }
 
 type ListUsersResponse struct {
-	Success bool      `json:"success" example:"true"`
-	Data    []Summary `json:"data"`
+	Success bool                  `json:"success" example:"true"`
+	Data    []Summary             `json:"data"`
+	Meta    *utils.PaginationMeta `json:"meta,omitempty"`
 }
 
 type ChangeRoleResponse struct {

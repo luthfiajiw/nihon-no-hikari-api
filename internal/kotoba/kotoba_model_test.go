@@ -97,9 +97,18 @@ func TestFilterValidation(t *testing.T) {
 			t.Fatal(f)
 		}
 	}
-	for _, f := range []Filter{{Sort: "injection"}, {Level: "N6"}, {Status: "unknown"}, {Sort: "vocabulary"}} {
+	for _, f := range []Filter{{Sort: "injection"}, {Level: "N6"}, {Category: "Lainnya"}, {Status: "unknown"}, {Sort: "vocabulary"}} {
 		if err := f.Validate(true); err == nil {
 			t.Fatalf("accepted admin filter: %+v", f)
+		}
+	}
+	for _, category := range []string{"", "all", "Dasar", "Populer", "Pemula", "  Dasar  "} {
+		f := Filter{Category: category}
+		if err := f.Validate(false); err != nil {
+			t.Fatalf("rejected valid category %q: %v", category, err)
+		}
+		if category == "  Dasar  " && f.Category != "Dasar" {
+			t.Fatalf("expected trimmed category, got %q", f.Category)
 		}
 	}
 	f := Filter{Status: "active"}

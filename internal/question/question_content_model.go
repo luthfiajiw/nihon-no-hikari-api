@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"nihon-no-hikari-api/pkg/kanastroke"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 	"golang.org/x/text/unicode/norm"
@@ -173,10 +174,23 @@ type RemoveResponse struct {
 	Archived bool `json:"archived"`
 } // @name internal_question.RemoveResponse
 
+type QuestionSetFilter struct {
+	Pagination utils.PaginationParams
+	Skill      string
+	Kind       string
+	Status     string
+}
+
+type TemplateFilter struct {
+	Pagination utils.PaginationParams
+	Script     string
+}
+
 type ContentListResponse struct {
-	Success bool `json:"success" example:"true"`
+	Success bool                  `json:"success" example:"true"`
 	// Kolom resource sesuai kind, tanpa content lesson; course menyertakan module_count dan lesson_count.
-	Data []json.RawMessage `json:"data" swaggertype:"array,object"`
+	Data []json.RawMessage     `json:"data" swaggertype:"array,object"`
+	Meta *utils.PaginationMeta `json:"meta,omitempty"`
 } // @name internal_question.ContentListResponse
 
 type ContentDetailResponse struct {
@@ -197,8 +211,9 @@ type StrokeTemplate struct {
 } // @name internal_question.StrokeTemplate
 
 type TemplatesResponse struct {
-	Success bool             `json:"success" example:"true"`
-	Data    []StrokeTemplate `json:"data"`
+	Success bool                  `json:"success" example:"true"`
+	Data    []StrokeTemplate      `json:"data"`
+	Meta    *utils.PaginationMeta `json:"meta,omitempty"`
 } // @name internal_question.TemplatesResponse
 
 type StrokeTemplateDetail struct {

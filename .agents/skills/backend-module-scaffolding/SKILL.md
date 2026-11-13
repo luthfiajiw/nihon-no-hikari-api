@@ -20,7 +20,14 @@ Standard operating procedure for scaffolding and implementing domain modules in 
    - Circular imports between domains are strictly prohibited (e.g., `course` may read from `question` via a read-only port such as `CatalogReader`, but `question` must never import `course`).
    - Never dispatch write operations to another domain directly.
 
-3. **Database & Transactions**:
+3. **Administrative Pagination Standards**:
+   - All administrative listings support pagination query parameters (`?page=<int>&limit=<int>&search=<string>`) parsed via `utils.ParsePaginationParams(c)`.
+   - Handlers construct filter structs embedding `utils.PaginationParams` and pass them to the service and repository.
+   - Repositories execute a count query (`COUNT(*)`) alongside the data query with `LIMIT ... OFFSET ...` using `params.Offset()`.
+   - Repositories and services return `utils.BuildPaginationMeta(filter.Pagination, total)`.
+   - Backward compatibility: When `page` and `limit` are not provided, queries return all matching items with a default `PaginationMeta`.
+
+4. **Database & Transactions**:
    - Use `pgx/v5` (`*pgxpool.Pool` at construction time in `NewRepository(pool *pgxpool.Pool)`).
    - **Shared `db.Querier` & `dbRepository` naming**: Implement repositories with an unexported `type dbRepository struct { q db.Querier }` backed by the centralized `db.Querier` interface from `nihon-no-hikari-api/pkg/db`. **Do not** declare duplicate module-local `querier` or `dbQuerier` interfaces.
    - **Single query handle**: Route every repository query through `r.q` (`Exec`, `Query`, `QueryRow`). Do **not** store a separate `pool *pgxpool.Pool` field on `dbRepository` alongside `q db.Querier` so transaction-bound calls can never accidentally escape onto the connection pool (the sole legacy exception is `question.dbRepository`, which keeps `pool` strictly for existing attempt transactions).

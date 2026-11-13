@@ -32,6 +32,10 @@ Keep the attempt transaction implementation intact. Draft storage continues to
 use `admin_drafts` and the resource keys `course`, `module`, `lesson`, and
 `question_set`; URL changes do not require a database migration.
 
+## Administrative pagination
+
+Administrative listing endpoints (`/admin/users`, `/admin/levels`, `/admin/courses`, `/admin/modules`, `/admin/lessons`, `/admin/question-sets`, `/admin/templates`, `/admin/kotoba/topics`) support standardized pagination and search query parameters (`?page=&limit=&search=`). Handlers parse them using `utils.ParsePaginationParams(c)` from `nihon-no-hikari-api/pkg/utils` and pass them into domain services and repositories. Repositories apply `COUNT(*)` and `LIMIT ... OFFSET ...` using `params.Offset()`, returning records alongside `PaginationMeta`. Unpaginated requests default to returning all records with accurate total counts to preserve backward compatibility.
+
 ## Go file naming
 
 Every Go file under an `internal/<module>` directory starts with that module's

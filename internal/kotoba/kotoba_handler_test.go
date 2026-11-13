@@ -52,6 +52,11 @@ func (s *operationsStub) List(ctx context.Context, f Filter, admin bool) ([]Topi
 	s.filter, s.admin = f, admin
 	return []Topic{}, s.err
 }
+func (s *operationsStub) ListPaginated(ctx context.Context, f Filter, admin bool) ([]Topic, utils.PaginationMeta, error) {
+	s.filter, s.admin = f, admin
+	meta := utils.BuildPaginationMeta(f.Pagination, 0)
+	return []Topic{}, meta, s.err
+}
 func (s *operationsStub) Detail(ctx context.Context, id uuid.UUID, admin bool) (Topic, error) {
 	s.id, s.admin = id, admin
 	return Topic{ID: id}, s.err
@@ -108,10 +113,10 @@ func TestRouteAuthorization(t *testing.T) {
 func TestHandlerContracts(t *testing.T) {
 	stub := &operationsStub{}
 	app := makeApp(stub)
-	if status, data := request(t, app, "GET", "/api/v1/admin/kotoba/topics?level=N5&status=active&sort=title&search=sekolah", "Bearer Admin", "", nil); status != 200 || !bytes.Contains(data, []byte(`"data":[]`)) || !stub.admin || stub.filter.Search != "sekolah" {
+	if status, data := request(t, app, "GET", "/api/v1/admin/kotoba/topics?level=N5&category=%20Dasar%20&status=active&sort=title&search=sekolah", "Bearer Admin", "", nil); status != 200 || !bytes.Contains(data, []byte(`"data":[]`)) || !stub.admin || stub.filter.Search != "sekolah" || stub.filter.Category != "Dasar" {
 		t.Fatalf("list: %d %s", status, data)
 	}
-	if status, _ := request(t, app, "GET", "/api/v1/kotoba/topics?sort=vocabulary", "Bearer Student", "", nil); status != 200 || stub.admin {
+	if status, _ := request(t, app, "GET", "/api/v1/kotoba/topics?sort=vocabulary&category=Populer", "Bearer Student", "", nil); status != 200 || stub.admin || stub.filter.Category != "Populer" {
 		t.Fatal("student list failed")
 	}
 	in := validInput()
@@ -143,6 +148,9 @@ func TestHandlerContracts(t *testing.T) {
 	}
 	if status, _ := request(t, app, "GET", "/api/v1/admin/kotoba/topics?sort=invalid", "Bearer Admin", "", nil); status != 400 {
 		t.Fatal("bad sorting accepted")
+	}
+	if status, data := request(t, app, "GET", "/api/v1/admin/kotoba/topics?category=invalid", "Bearer Admin", "", nil); status != 400 || !bytes.Contains(data, []byte("Parameter category harus salah satu dari Dasar, Populer, Pemula, atau all")) {
+		t.Fatalf("bad category accepted: %d %s", status, data)
 	}
 }
 func TestHandlerErrorEnvelopes(t *testing.T) {

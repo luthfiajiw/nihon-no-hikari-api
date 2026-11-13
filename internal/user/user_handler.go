@@ -2,6 +2,8 @@ package user
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"nihon-no-hikari-api/pkg/middleware"
 	"nihon-no-hikari-api/pkg/utils"
@@ -347,7 +349,41 @@ func (h *Handler) revokeOtherSessions(c fiber.Ctx) error {
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/users [get]
 func (h *Handler) list(c fiber.Ctx) error {
-	rows, err := h.pool.Query(c.Context(), `SELECT id, email, display_name, role FROM users ORDER BY created_at, id`)
+	p := utils.ParsePaginationParams(c)
+	roleFilter := strings.TrimSpace(c.Query("role"))
+
+	var whereClauses []string
+	var args []any
+	argIndex := 1
+
+	if p.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("(strpos(lower(display_name || ' ' || email), lower($%d)) > 0)", argIndex))
+		args = append(args, p.Search)
+		argIndex++
+	}
+	if roleFilter != "" && (roleFilter == string(RoleUser) || roleFilter == string(RoleAdmin)) {
+		whereClauses = append(whereClauses, fmt.Sprintf("role = $%d", argIndex))
+		args = append(args, roleFilter)
+		argIndex++
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	var total int
+	countQuery := "SELECT count(*) FROM users" + whereSQL
+	if err := h.pool.QueryRow(c.Context(), countQuery, args...).Scan(&total); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal mengambil daftar pengguna"})
+	}
+
+	query := "SELECT id, email, display_name, role FROM users" + whereSQL + " ORDER BY created_at, id"
+	if p.Paginated {
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", p.Limit, p.Offset())
+	}
+
+	rows, err := h.pool.Query(c.Context(), query, args...)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal mengambil daftar pengguna"})
 	}
@@ -364,7 +400,8 @@ func (h *Handler) list(c fiber.Ctx) error {
 	if rows.Err() != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: "gagal membaca pengguna"})
 	}
-	return c.JSON(fiber.Map{"success": true, "data": users})
+	meta := utils.BuildPaginationMeta(p, total)
+	return c.JSON(ListUsersResponse{Success: true, Data: users, Meta: &meta})
 }
 
 // changeRole godoc

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"nihon-no-hikari-api/pkg/contenthtml"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 )
@@ -173,10 +174,18 @@ type RemoveResponse struct {
 	Archived bool `json:"archived"`
 } // @name internal_course.RemoveResponse
 
+type AdminListFilter struct {
+	Pagination utils.PaginationParams
+	Status     string
+	Level      string
+	PriceType  string
+}
+
 type ContentListResponse struct {
-	Success bool `json:"success" example:"true"`
+	Success bool                  `json:"success" example:"true"`
 	// Kolom resource sesuai kind, tanpa content lesson; course menyertakan module_count dan lesson_count.
-	Data []json.RawMessage `json:"data" swaggertype:"array,object"`
+	Data []json.RawMessage     `json:"data" swaggertype:"array,object"`
+	Meta *utils.PaginationMeta `json:"meta,omitempty"`
 } // @name internal_course.ContentListResponse
 
 type ContentDetailResponse struct {
@@ -224,8 +233,9 @@ type LevelInput struct {
 } // @name internal_course.LevelInput
 
 type LevelsResponse struct {
-	Success bool    `json:"success" example:"true"`
-	Data    []Level `json:"data"`
+	Success bool                  `json:"success" example:"true"`
+	Data    []Level               `json:"data"`
+	Meta    *utils.PaginationMeta `json:"meta,omitempty"`
 } // @name internal_course.LevelsResponse
 
 type UpdateLevelPriceRequest struct {

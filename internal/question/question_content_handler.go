@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 
 	"nihon-no-hikari-api/pkg/utils"
 
@@ -57,7 +58,13 @@ func resourceID(c fiber.Ctx) (uuid.UUID, error) { return uuid.Parse(c.Params("id
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/templates [get]
 func (h *Handler) templates(c fiber.Ctx) error {
-	response, err := h.service.Templates(c.Context())
+	p := utils.ParsePaginationParams(c)
+	script := strings.TrimSpace(c.Query("script"))
+	filter := TemplateFilter{
+		Pagination: p,
+		Script:     script,
+	}
+	response, err := h.service.TemplatesPaginated(c.Context(), filter)
 	if err != nil {
 		return serverError(c, err)
 	}
@@ -218,7 +225,17 @@ func decodeTemplateInput(raw []byte) (StrokeTemplateInput, error) {
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/question-sets [get]
 func (h *Handler) adminList(c fiber.Ctx) error {
-	response, err := h.service.ListAdminQuestionSets(c.Context())
+	p := utils.ParsePaginationParams(c)
+	skill := strings.TrimSpace(c.Query("skill"))
+	kind := strings.TrimSpace(c.Query("kind"))
+	status := strings.TrimSpace(c.Query("status"))
+	filter := QuestionSetFilter{
+		Pagination: p,
+		Skill:      skill,
+		Kind:       kind,
+		Status:     status,
+	}
+	response, err := h.service.ListAdminQuestionSetsPaginated(c.Context(), filter)
 	if err != nil {
 		return serverError(c, err)
 	}

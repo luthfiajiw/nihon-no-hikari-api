@@ -8,6 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"nihon-no-hikari-api/pkg/utils"
+
 	"github.com/google/uuid"
 )
 
@@ -136,14 +138,18 @@ type Media struct {
 	Status       string     `json:"-"`
 	Attempts     int        `json:"-"`
 }
-type Filter struct{ Level, Search, Status, Sort string }
+type Filter struct {
+	Level, Category, Search, Status, Sort string
+	Pagination                            utils.PaginationParams
+}
 type TopicResponse struct {
 	Success bool  `json:"success"`
 	Data    Topic `json:"data"`
 }
 type TopicsResponse struct {
-	Success bool    `json:"success"`
-	Data    []Topic `json:"data"`
+	Success bool                  `json:"success"`
+	Data    []Topic               `json:"data"`
+	Meta    *utils.PaginationMeta `json:"meta,omitempty"`
 }
 type MediaResponse struct {
 	Success bool  `json:"success"`
@@ -166,6 +172,10 @@ func (f *Filter) Validate(admin bool) error {
 	}
 	if f.Status != "" && (!admin || (f.Status != "all" && f.Status != "active" && f.Status != "inactive")) {
 		e["status"] = "Status tidak valid."
+	}
+	f.Category = strings.TrimSpace(f.Category)
+	if f.Category != "" && f.Category != "all" && f.Category != "Dasar" && f.Category != "Populer" && f.Category != "Pemula" {
+		e["category"] = "Parameter category harus salah satu dari Dasar, Populer, Pemula, atau all"
 	}
 	if f.Sort == "" {
 		if admin {

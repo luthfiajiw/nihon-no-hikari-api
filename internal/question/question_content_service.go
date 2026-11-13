@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"nihon-no-hikari-api/pkg/kanastroke"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,7 @@ import (
 
 type ContentService interface {
 	Templates(context.Context) (TemplatesResponse, error)
+	TemplatesPaginated(context.Context, TemplateFilter) (TemplatesResponse, error)
 	CreateQuestionSet(context.Context, SetInput) (CreateResponse, error)
 	UpdateQuestionSet(context.Context, uuid.UUID, SetInput) (UpdateResponse, error)
 	Template(context.Context, uuid.UUID) (StrokeTemplateResponse, error)
@@ -21,6 +23,7 @@ type ContentService interface {
 	CreateTemplate(context.Context, StrokeTemplateInput) (StrokeTemplateResponse, error)
 	UpdateTemplate(context.Context, uuid.UUID, StrokeTemplateInput) (StrokeTemplateResponse, error)
 	ListAdminQuestionSets(context.Context) (ContentListResponse, error)
+	ListAdminQuestionSetsPaginated(context.Context, QuestionSetFilter) (ContentListResponse, error)
 	AdminQuestionSetDetail(context.Context, uuid.UUID) (ContentDetailResponse, error)
 	PublishQuestionSet(context.Context, uuid.UUID) (PublishResponse, error)
 	RemoveQuestionSet(context.Context, uuid.UUID) (RemoveResponse, error)
@@ -38,12 +41,38 @@ func (s *service) execTx(ctx context.Context, fn func(ContentRepository) error) 
 
 func (s *service) Templates(ctx context.Context) (TemplatesResponse, error) {
 	items, err := s.repository.Templates(ctx)
-	return TemplatesResponse{Success: true, Data: items}, err
+	if err != nil {
+		return TemplatesResponse{}, err
+	}
+	meta := utils.BuildPaginationMeta(utils.PaginationParams{Paginated: false}, len(items))
+	return TemplatesResponse{Success: true, Data: items, Meta: &meta}, nil
+}
+
+func (s *service) TemplatesPaginated(ctx context.Context, filter TemplateFilter) (TemplatesResponse, error) {
+	items, total, err := s.repository.TemplatesPaginated(ctx, filter)
+	if err != nil {
+		return TemplatesResponse{}, err
+	}
+	meta := utils.BuildPaginationMeta(filter.Pagination, total)
+	return TemplatesResponse{Success: true, Data: items, Meta: &meta}, nil
 }
 
 func (s *service) ListAdminQuestionSets(ctx context.Context) (ContentListResponse, error) {
 	items, err := s.repository.ListContent(ctx, "question_set")
-	return ContentListResponse{Success: true, Data: items}, err
+	if err != nil {
+		return ContentListResponse{}, err
+	}
+	meta := utils.BuildPaginationMeta(utils.PaginationParams{Paginated: false}, len(items))
+	return ContentListResponse{Success: true, Data: items, Meta: &meta}, nil
+}
+
+func (s *service) ListAdminQuestionSetsPaginated(ctx context.Context, filter QuestionSetFilter) (ContentListResponse, error) {
+	items, total, err := s.repository.ListQuestionSetsPaginated(ctx, filter)
+	if err != nil {
+		return ContentListResponse{}, err
+	}
+	meta := utils.BuildPaginationMeta(filter.Pagination, total)
+	return ContentListResponse{Success: true, Data: items, Meta: &meta}, nil
 }
 
 func (s *service) AdminQuestionSetDetail(ctx context.Context, id uuid.UUID) (ContentDetailResponse, error) {

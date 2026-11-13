@@ -18,6 +18,7 @@ import (
 type Repository interface {
 	UseTx(pgx.Tx) Repository
 	List(context.Context, Filter, bool) ([]Topic, error)
+	ListPaginated(context.Context, Filter, bool) ([]Topic, int, error)
 	Get(context.Context, uuid.UUID, bool) (Topic, error)
 	LockTopic(context.Context, uuid.UUID) (int64, error)
 	TopicMedia(context.Context, uuid.UUID) ([]uuid.UUID, error)
@@ -89,29 +90,63 @@ func scanTopic(row interface{ Scan(...any) error }) (Topic, error) {
 	}
 	return t, nil
 }
-func (r *dbRepository) List(ctx context.Context, f Filter, admin bool) ([]Topic, error) {
+func (r *dbRepository) ListPaginated(ctx context.Context, f Filter, admin bool) ([]Topic, int, error) {
 	order := map[string]string{"order": "t.order_index ASC,t.id ASC", "title": "t.title ASC,t.id ASC", "newest": "t.created_at DESC,t.id ASC", "vocabulary": "15 DESC,t.id ASC"}[f.Sort]
 	if order == "" {
-		return nil, FieldErrors{"sort": "Pengurutan tidak valid."}
+		return nil, 0, FieldErrors{"sort": "Pengurutan tidak valid."}
 	}
-	rows, err := r.q.Query(ctx, `SELECT `+topicColumns+`, '[]'::jsonb`+topicFrom+`
+	search := f.Search
+	if search == "" && f.Pagination.Search != "" {
+		search = f.Pagination.Search
+	}
+	var total int
+	err := r.q.QueryRow(ctx, `SELECT count(*)`+topicFrom+`
         WHERE ($1 OR (t.is_active AND t.is_visible)) AND ($2='' OR l.code=$2)
         AND ($3='' OR strpos(lower(t.title || ' ' || t.description),lower($3))>0)
         AND ($4='' OR $4='all' OR ($4='active' AND t.is_active) OR ($4='inactive' AND NOT t.is_active))
-        ORDER BY `+order, admin, f.Level, f.Search, f.Status)
+        AND ($5='' OR $5='all' OR t.category=$5)`,
+		admin, f.Level, search, f.Status, f.Category).Scan(&total)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	var rows pgx.Rows
+	if f.Pagination.Paginated {
+		rows, err = r.q.Query(ctx, `SELECT `+topicColumns+`, '[]'::jsonb`+topicFrom+`
+        WHERE ($1 OR (t.is_active AND t.is_visible)) AND ($2='' OR l.code=$2)
+        AND ($3='' OR strpos(lower(t.title || ' ' || t.description),lower($3))>0)
+        AND ($4='' OR $4='all' OR ($4='active' AND t.is_active) OR ($4='inactive' AND NOT t.is_active))
+        AND ($5='' OR $5='all' OR t.category=$5)
+        ORDER BY `+order+` LIMIT $6 OFFSET $7`, admin, f.Level, search, f.Status, f.Category, f.Pagination.Limit, f.Pagination.Offset())
+	} else {
+		rows, err = r.q.Query(ctx, `SELECT `+topicColumns+`, '[]'::jsonb`+topicFrom+`
+        WHERE ($1 OR (t.is_active AND t.is_visible)) AND ($2='' OR l.code=$2)
+        AND ($3='' OR strpos(lower(t.title || ' ' || t.description),lower($3))>0)
+        AND ($4='' OR $4='all' OR ($4='active' AND t.is_active) OR ($4='inactive' AND NOT t.is_active))
+        AND ($5='' OR $5='all' OR t.category=$5)
+        ORDER BY `+order, admin, f.Level, search, f.Status, f.Category)
+	}
+	if err != nil {
+		return nil, 0, err
 	}
 	defer rows.Close()
 	result := []Topic{}
 	for rows.Next() {
 		t, err := scanTopic(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		result = append(result, t)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return result, total, nil
+}
+
+func (r *dbRepository) List(ctx context.Context, f Filter, admin bool) ([]Topic, error) {
+	topics, _, err := r.ListPaginated(ctx, f, admin)
+	return topics, err
 }
 func (r *dbRepository) Get(ctx context.Context, id uuid.UUID, admin bool) (Topic, error) {
 	return scanTopic(r.q.QueryRow(ctx, `SELECT `+topicColumns+`,`+vocabularyJSON+topicFrom+` WHERE t.id=$1 AND ($2 OR t.is_active)`, id, admin))

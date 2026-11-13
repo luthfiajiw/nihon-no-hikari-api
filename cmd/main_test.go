@@ -46,7 +46,15 @@ func (courseRoutesService) ListAdminContent(_ context.Context, kind string) (mod
 	return model.ContentListResponse{Success: true, Data: []json.RawMessage{json.RawMessage(`{"kind":"` + kind + `"}`)}}, nil
 }
 
+func (courseRoutesService) ListAdminContentPaginated(_ context.Context, kind string, _ model.AdminListFilter) (model.ContentListResponse, error) {
+	return model.ContentListResponse{Success: true, Data: []json.RawMessage{json.RawMessage(`{"kind":"` + kind + `"}`)}}, nil
+}
+
 func (courseRoutesService) AdminLevels(context.Context) (model.LevelsResponse, error) {
+	return model.LevelsResponse{Success: true, Data: []model.Level{}}, nil
+}
+
+func (courseRoutesService) AdminLevelsPaginated(context.Context, model.AdminListFilter) (model.LevelsResponse, error) {
 	return model.LevelsResponse{Success: true, Data: []model.Level{}}, nil
 }
 
@@ -56,7 +64,15 @@ func (questionRoutesService) ListAdminQuestionSets(context.Context) (question.Co
 	return question.ContentListResponse{Success: true, Data: []json.RawMessage{}}, nil
 }
 
+func (questionRoutesService) ListAdminQuestionSetsPaginated(context.Context, question.QuestionSetFilter) (question.ContentListResponse, error) {
+	return question.ContentListResponse{Success: true, Data: []json.RawMessage{}}, nil
+}
+
 func (questionRoutesService) Templates(context.Context) (question.TemplatesResponse, error) {
+	return question.TemplatesResponse{Success: true, Data: []question.StrokeTemplate{}}, nil
+}
+
+func (questionRoutesService) TemplatesPaginated(context.Context, question.TemplateFilter) (question.TemplatesResponse, error) {
 	return question.TemplatesResponse{Success: true, Data: []question.StrokeTemplate{}}, nil
 }
 

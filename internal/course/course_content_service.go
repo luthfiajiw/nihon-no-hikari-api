@@ -9,6 +9,7 @@ import (
 
 	"nihon-no-hikari-api/internal/course/model"
 	"nihon-no-hikari-api/pkg/contenthtml"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,6 +18,7 @@ import (
 type ContentService interface {
 	AdminCatalog(context.Context, *uuid.UUID) (model.CatalogResponse, error)
 	AdminLevels(context.Context) (model.LevelsResponse, error)
+	AdminLevelsPaginated(context.Context, model.AdminListFilter) (model.LevelsResponse, error)
 	PublicLevels(context.Context) (model.LevelsResponse, error)
 	AdminLevelDetail(context.Context, uuid.UUID) (model.LevelResponse, error)
 	CreateAdminLevel(context.Context, model.LevelInput) (model.LevelResponse, error)
@@ -25,6 +27,7 @@ type ContentService interface {
 	UpdateAdminLevelPrice(context.Context, uuid.UUID, model.UpdateLevelPriceRequest) (model.LevelResponse, error)
 	PreviewLessonContent(context.Context, json.RawMessage) (model.PreviewResponse, error)
 	ListAdminContent(context.Context, string) (model.ContentListResponse, error)
+	ListAdminContentPaginated(context.Context, string, model.AdminListFilter) (model.ContentListResponse, error)
 	AdminContentDetail(context.Context, string, uuid.UUID) (model.ContentDetailResponse, error)
 	CreateAdminContent(context.Context, string, model.CoreInput) (model.CreateResponse, error)
 	UpdateAdminContent(context.Context, string, uuid.UUID, model.CoreInput) (model.UpdateResponse, error)
@@ -61,7 +64,20 @@ func (s *service) AdminCatalog(ctx context.Context, courseID *uuid.UUID) (model.
 
 func (s *service) AdminLevels(ctx context.Context) (model.LevelsResponse, error) {
 	items, err := s.repository.Levels(ctx)
-	return model.LevelsResponse{Success: true, Data: items}, err
+	if err != nil {
+		return model.LevelsResponse{}, err
+	}
+	meta := utils.BuildPaginationMeta(utils.PaginationParams{Paginated: false}, len(items))
+	return model.LevelsResponse{Success: true, Data: items, Meta: &meta}, nil
+}
+
+func (s *service) AdminLevelsPaginated(ctx context.Context, filter model.AdminListFilter) (model.LevelsResponse, error) {
+	items, total, err := s.repository.LevelsPaginated(ctx, filter)
+	if err != nil {
+		return model.LevelsResponse{}, err
+	}
+	meta := utils.BuildPaginationMeta(filter.Pagination, total)
+	return model.LevelsResponse{Success: true, Data: items, Meta: &meta}, nil
 }
 
 func (s *service) PublicLevels(ctx context.Context) (model.LevelsResponse, error) {
@@ -185,7 +201,23 @@ func (s *service) ListAdminContent(ctx context.Context, kind string) (model.Cont
 		return model.ContentListResponse{}, inputMessage("jenis konten tidak valid")
 	}
 	items, err := s.repository.ListContent(ctx, kind)
-	return model.ContentListResponse{Success: true, Data: items}, err
+	if err != nil {
+		return model.ContentListResponse{}, err
+	}
+	meta := utils.BuildPaginationMeta(utils.PaginationParams{Paginated: false}, len(items))
+	return model.ContentListResponse{Success: true, Data: items, Meta: &meta}, nil
+}
+
+func (s *service) ListAdminContentPaginated(ctx context.Context, kind string, filter model.AdminListFilter) (model.ContentListResponse, error) {
+	if !validKind(kind) {
+		return model.ContentListResponse{}, inputMessage("jenis konten tidak valid")
+	}
+	items, total, err := s.repository.ListContentPaginated(ctx, kind, filter)
+	if err != nil {
+		return model.ContentListResponse{}, err
+	}
+	meta := utils.BuildPaginationMeta(filter.Pagination, total)
+	return model.ContentListResponse{Success: true, Data: items, Meta: &meta}, nil
 }
 
 func (s *service) AdminContentDetail(ctx context.Context, kind string, id uuid.UUID) (model.ContentDetailResponse, error) {

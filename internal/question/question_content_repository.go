@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,7 +16,9 @@ type ContentRepository interface {
 	CatalogReader
 	UseTx(pgx.Tx) ContentRepository
 	Templates(context.Context) ([]StrokeTemplate, error)
+	TemplatesPaginated(context.Context, TemplateFilter) ([]StrokeTemplate, int, error)
 	ListContent(context.Context, string) ([]json.RawMessage, error)
+	ListQuestionSetsPaginated(context.Context, QuestionSetFilter) ([]json.RawMessage, int, error)
 	Content(context.Context, string, uuid.UUID) (json.RawMessage, error)
 	ContentState(context.Context, string, uuid.UUID) (ContentState, error)
 	Draft(context.Context, string, uuid.UUID) (json.RawMessage, error)
@@ -129,6 +132,59 @@ func (r *dbRepository) ListContent(ctx context.Context, kind string) ([]json.Raw
 	return r.rows(ctx, fmt.Sprintf(`SELECT %s FROM public.%s t ORDER BY t.order_index,t.created_at,t.id`, projection, name))
 }
 
+func (r *dbRepository) ListQuestionSetsPaginated(ctx context.Context, filter QuestionSetFilter) ([]json.RawMessage, int, error) {
+	var whereClauses []string
+	var args []any
+	argIndex := 1
+
+	if filter.Skill != "" && filter.Skill != "all" {
+		whereClauses = append(whereClauses, fmt.Sprintf("t.skill = $%d", argIndex))
+		args = append(args, filter.Skill)
+		argIndex++
+	}
+
+	if filter.Kind != "" && !strings.EqualFold(filter.Kind, "all") {
+		whereClauses = append(whereClauses, fmt.Sprintf("t.kind = $%d", argIndex))
+		args = append(args, filter.Kind)
+		argIndex++
+	}
+
+	switch filter.Status {
+	case "published":
+		whereClauses = append(whereClauses, "t.is_published = true AND t.archived_at IS NULL")
+	case "draft":
+		whereClauses = append(whereClauses, "t.is_published = false AND t.archived_at IS NULL")
+	case "archived":
+		whereClauses = append(whereClauses, "t.archived_at IS NOT NULL")
+	}
+
+	if filter.Pagination.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("(strpos(lower(t.title), lower($%d)) > 0)", argIndex))
+		args = append(args, filter.Pagination.Search)
+		argIndex++
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	var total int
+	countQuery := "SELECT count(*) FROM public.question_sets t" + whereSQL
+	if err := r.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	projection := "to_jsonb(t) - 'content'"
+	query := fmt.Sprintf("SELECT %s FROM public.question_sets t%s ORDER BY t.order_index,t.created_at,t.id", projection, whereSQL)
+	if filter.Pagination.Paginated {
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Pagination.Limit, filter.Pagination.Offset())
+	}
+
+	items, err := r.rows(ctx, query, args...)
+	return items, total, err
+}
+
 func (r *dbRepository) Content(ctx context.Context, kind string, id uuid.UUID) (json.RawMessage, error) {
 	name, ok := table(kind)
 	if !ok {
@@ -240,6 +296,47 @@ func (r *dbRepository) Templates(ctx context.Context) ([]StrokeTemplate, error) 
 		return nil, err
 	}
 	return decodeRecords[StrokeTemplate](items)
+}
+
+func (r *dbRepository) TemplatesPaginated(ctx context.Context, filter TemplateFilter) ([]StrokeTemplate, int, error) {
+	var whereClauses []string
+	var args []any
+	argIndex := 1
+
+	if filter.Script != "" && filter.Script != "all" {
+		whereClauses = append(whereClauses, fmt.Sprintf("script = $%d", argIndex))
+		args = append(args, filter.Script)
+		argIndex++
+	}
+
+	if filter.Pagination.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("(strpos(lower(character || ' ' || romaji || ' ' || source_version), lower($%d)) > 0)", argIndex))
+		args = append(args, filter.Pagination.Search)
+		argIndex++
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	var total int
+	countQuery := "SELECT count(*) FROM public.kana_stroke_templates" + whereSQL
+	if err := r.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := "SELECT jsonb_build_object('id',id,'character',character,'romaji',romaji,'script',script,'source_version',source_version,'stroke_count',jsonb_array_length(stroke_data->'strokes')) FROM public.kana_stroke_templates" + whereSQL + " ORDER BY script,character,source_version DESC"
+	if filter.Pagination.Paginated {
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Pagination.Limit, filter.Pagination.Offset())
+	}
+
+	items, err := r.rows(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	templates, err := decodeRecords[StrokeTemplate](items)
+	return templates, total, err
 }
 
 func (r *dbRepository) QuestionSetState(ctx context.Context, id uuid.UUID) (QuestionSetState, error) {

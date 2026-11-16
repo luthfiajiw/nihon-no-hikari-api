@@ -290,3 +290,42 @@ func TestAdminContentDatabase(t *testing.T) {
 		}
 	})
 }
+
+func TestLevelCreateAndUpdateDatabase(t *testing.T) {
+	pool := testdb.New(t, 20)
+	ctx := context.Background()
+	repository := NewRepository(pool)
+	svc := NewService(db.NewTx(pool), repository, question.NewRepository(pool))
+
+	tag := "Populer"
+	desc := "Level dasar"
+	created, err := svc.CreateAdminLevel(ctx, model.LevelInput{
+		Code:        "N5",
+		Name:        "JLPT N5",
+		Tag:         &tag,
+		Description: &desc,
+		OrderIndex:  utils.Ptr(int64(1)),
+		Price:       utils.Ptr(int64(149000)),
+		Points:      []string{"Poin 1", "Poin 2"},
+	})
+	if err != nil {
+		t.Fatalf("CreateAdminLevel failed: %v", err)
+	}
+	if created.Data.Code != "N5" || len(created.Data.Points) != 2 {
+		t.Fatalf("unexpected created level: %+v", created.Data)
+	}
+
+	updated, err := svc.UpdateAdminLevel(ctx, created.Data.ID, model.LevelInput{
+		Code:       "N5",
+		Name:       "JLPT N5 Revisi",
+		OrderIndex: utils.Ptr(int64(2)),
+		Price:      utils.Ptr(int64(99000)),
+		Points:     []string{"Poin baru"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateAdminLevel failed: %v", err)
+	}
+	if updated.Data.Name != "JLPT N5 Revisi" || updated.Data.Price != 99000 || len(updated.Data.Points) != 1 || updated.Data.Points[0] != "Poin baru" {
+		t.Fatalf("unexpected updated level: %+v", updated.Data)
+	}
+}

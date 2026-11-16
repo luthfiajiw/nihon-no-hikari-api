@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -16,6 +17,7 @@ import (
 type contentServiceStub struct {
 	Service
 	listPaginated func(context.Context, QuestionSetFilter) (ContentListResponse, error)
+	removeSet     func(context.Context, uuid.UUID) (RemoveResponse, error)
 }
 
 func (s *contentServiceStub) ListAdminQuestionSetsPaginated(ctx context.Context, filter QuestionSetFilter) (ContentListResponse, error) {
@@ -23,6 +25,13 @@ func (s *contentServiceStub) ListAdminQuestionSetsPaginated(ctx context.Context,
 		return s.listPaginated(ctx, filter)
 	}
 	return ContentListResponse{}, nil
+}
+
+func (s *contentServiceStub) RemoveQuestionSet(ctx context.Context, id uuid.UUID) (RemoveResponse, error) {
+	if s.removeSet != nil {
+		return s.removeSet(ctx, id)
+	}
+	return RemoveResponse{}, nil
 }
 
 func TestAdminListForwardsKindFilter(t *testing.T) {
@@ -77,5 +86,33 @@ func TestResponseEnvelopesPreserveNullAndOmittedFields(t *testing.T) {
 		if err != nil || string(raw) != tc.want {
 			t.Fatalf("%s != %s (%v)", raw, tc.want, err)
 		}
+	}
+}
+
+func TestAdminRemoveReturns409OnRelationConflict(t *testing.T) {
+	wantMsg := "Question set tidak dapat dihapus karena sudah memiliki relasi dengan tabel lain atau riwayat attempt siswa."
+	stub := &contentServiceStub{
+		removeSet: func(context.Context, uuid.UUID) (RemoveResponse, error) {
+			return RemoveResponse{}, &applicationError{kind: ErrConflict, message: wantMsg}
+		},
+	}
+	h := &Handler{service: stub}
+	app := fiber.New()
+	app.Delete("/question-sets/:id", h.adminRemove)
+
+	req := httptest.NewRequest("DELETE", "/question-sets/"+uuid.NewString(), nil)
+	res, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test failed: %v", err)
+	}
+	if res.StatusCode != 409 {
+		t.Fatalf("status = %d, want 409", res.StatusCode)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if payload["success"] != false || payload["error"] != wantMsg {
+		t.Fatalf("unexpected payload: %+v", payload)
 	}
 }

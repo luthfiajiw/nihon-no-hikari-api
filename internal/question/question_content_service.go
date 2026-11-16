@@ -92,31 +92,36 @@ func (s *service) AdminQuestionSetDetail(ctx context.Context, id uuid.UUID) (Con
 }
 
 func (s *service) RemoveQuestionSet(ctx context.Context, id uuid.UUID) (RemoveResponse, error) {
-	var archived bool
 	err := s.execTx(ctx, func(r ContentRepository) error {
 		if _, err := r.ContentState(ctx, "question_set", id); err != nil {
 			return err
 		}
-		var err error
-		archived, err = r.HasHistory(ctx, "question_set", id)
+		used, err := r.HasHistory(ctx, "question_set", id)
 		if err != nil {
 			return err
 		}
-		if !archived {
-			deleted, err := r.DeleteContent(ctx, "question_set", id)
-			if err != nil {
-				return err
+		if used {
+			return &applicationError{
+				kind:    ErrConflict,
+				message: "Question set tidak dapat dihapus karena sudah memiliki relasi dengan tabel lain atau riwayat attempt siswa.",
 			}
-			archived = !deleted
 		}
-		if archived {
-			if err := r.Archive(ctx, "question_set", id); err != nil {
-				return err
+		deleted, err := r.DeleteContent(ctx, "question_set", id)
+		if err != nil {
+			return err
+		}
+		if !deleted {
+			return &applicationError{
+				kind:    ErrConflict,
+				message: "Question set tidak dapat dihapus karena sudah memiliki relasi dengan tabel lain atau riwayat attempt siswa.",
 			}
 		}
 		return r.DeleteDraft(ctx, "question_set", id)
 	})
-	return RemoveResponse{Success: true, Archived: archived}, err
+	if err != nil {
+		return RemoveResponse{}, err
+	}
+	return RemoveResponse{Success: true, Archived: false}, nil
 }
 
 func (s *service) RestoreQuestionSet(ctx context.Context, id uuid.UUID) (StatusResponse, error) {

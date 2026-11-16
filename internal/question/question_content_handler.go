@@ -356,8 +356,8 @@ func (h *Handler) adminPublish(c fiber.Ctx) error {
 }
 
 // remove godoc
-// @Summary Hapus atau arsipkan konten admin
-// @Description Memerlukan role Admin. Menghapus resource jika tidak memiliki riwayat atau relasi yang menghalangi penghapusan; jika ada, mengarsipkan dan menonaktifkan publikasi. Draft dihapus. Respons archived menunjukkan apakah resource diarsipkan.
+// @Summary Hapus question set admin
+// @Description Memerlukan role Admin. Menghapus resource beserta draft-nya jika tidak memiliki riwayat atau relasi dengan tabel lain; mengembalikan 409 jika sudah memiliki relasi.
 // @Tags Admin Content
 // @Produce json
 // @Security BearerAuth
@@ -367,6 +367,7 @@ func (h *Handler) adminPublish(c fiber.Ctx) error {
 // @Failure 401 {object} utils.ErrorRes
 // @Failure 403 {object} utils.ErrorRes
 // @Failure 404 {object} utils.ErrorRes
+// @Failure 409 {object} utils.ErrorRes
 // @Failure 500 {object} utils.ErrorRes
 // @Router /admin/question-sets/{id} [delete]
 func (h *Handler) adminRemove(c fiber.Ctx) error {

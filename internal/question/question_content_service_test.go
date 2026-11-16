@@ -181,12 +181,15 @@ func TestQuestionSetAttemptAndPlacementRestrictions(t *testing.T) {
 	}
 }
 
-func TestRemoveSelectsArchiveForHistoryOrBlockingRelations(t *testing.T) {
+func TestRemoveRejectsHistoryOrBlockingRelationsWithConflict(t *testing.T) {
 	for _, tc := range []struct {
-		name                          string
-		history, deleted, wantArchive bool
+		name             string
+		history, deleted bool
+		wantErr          error
 	}{
-		{"history", true, false, true}, {"delete", false, true, false}, {"blocked relation", false, false, true},
+		{"history", true, false, ErrConflict},
+		{"delete", false, true, nil},
+		{"blocked relation", false, false, ErrConflict},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var archived, cleaned bool
@@ -203,8 +206,14 @@ func TestRemoveSelectsArchiveForHistoryOrBlockingRelations(t *testing.T) {
 				deleteDraft: func(context.Context, string, uuid.UUID) error { cleaned = true; return nil },
 			}
 			result, err := newStubService(&contentRepositoryStub{active: active}).RemoveQuestionSet(context.Background(), uuid.New())
-			if err != nil || archived != tc.wantArchive || result.Archived != tc.wantArchive || !cleaned {
-				t.Fatalf("%+v %v", result, err)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) || archived || cleaned {
+					t.Fatalf("got result=%+v err=%v archived=%v cleaned=%v", result, err, archived, cleaned)
+				}
+				return
+			}
+			if err != nil || archived || result.Archived || !cleaned {
+				t.Fatalf("%+v %v archived=%v cleaned=%v", result, err, archived, cleaned)
 			}
 		})
 	}

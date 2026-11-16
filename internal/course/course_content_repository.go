@@ -459,7 +459,7 @@ func (r *dbRepository) CreateLevel(ctx context.Context, id uuid.UUID, input mode
 	err = r.QueryRow(
 		ctx,
 		`INSERT INTO public.levels (id, code, name, tag, description, order_index, price, points)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
 		RETURNING to_jsonb(levels.*)`,
 		id,
 		input.Code,
@@ -468,7 +468,7 @@ func (r *dbRepository) CreateLevel(ctx context.Context, id uuid.UUID, input mode
 		input.Description,
 		*input.OrderIndex,
 		*input.Price,
-		rawPoints,
+		string(rawPoints),
 	).Scan(&raw)
 	if err != nil {
 		if errors.Is(err, ErrConflict) {
@@ -499,7 +499,7 @@ func (r *dbRepository) UpdateLevel(ctx context.Context, id uuid.UUID, input mode
 	err = r.QueryRow(
 		ctx,
 		`UPDATE public.levels
-		SET code = $2, name = $3, tag = $4, description = $5, order_index = $6, price = $7, points = $8, updated_at = now()
+		SET code = $2, name = $3, tag = $4, description = $5, order_index = $6, price = $7, points = $8::jsonb, updated_at = now()
 		WHERE id = $1
 		RETURNING to_jsonb(levels.*)`,
 		id,
@@ -509,7 +509,7 @@ func (r *dbRepository) UpdateLevel(ctx context.Context, id uuid.UUID, input mode
 		input.Description,
 		*input.OrderIndex,
 		*input.Price,
-		rawPoints,
+		string(rawPoints),
 	).Scan(&raw)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {

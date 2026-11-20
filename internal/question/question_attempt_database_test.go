@@ -2,9 +2,11 @@ package question
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"nihon-no-hikari-api/internal/testdb"
+	"nihon-no-hikari-api/pkg/utils"
 
 	"github.com/google/uuid"
 )
@@ -126,4 +128,108 @@ func TestAttemptAnswerKeyDisclosureDatabase(t *testing.T) {
 
 		_ = repo.AbandonAttempt(ctx, examSetID, attempt.ID, user)
 	})
+}
+
+func TestPracticeAttemptModuleProgressSyncDatabase(t *testing.T) {
+	pool := testdb.New(t, 20)
+	ctx := context.Background()
+	user, _, _, _ := testdb.Fixture(t, pool)
+	repo := NewRepository(pool)
+
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var courseID, module1ID, lesson1ID uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT m.course_id, m.id, l.id FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.is_published = true LIMIT 1`).Scan(&courseID, &module1ID, &lesson1ID); err != nil {
+		t.Fatal(err)
+	}
+	// Remove fixture stroke_writing question set on lesson1 so a multiple_choice practice set controls lesson1 completion.
+	exec(`DELETE FROM question_sets WHERE lesson_id = $1`, lesson1ID)
+
+	set1ID := uuid.New()
+	q1ID := uuid.New()
+	opt1Correct := uuid.New()
+	opt1Wrong := uuid.New()
+	exec(`INSERT INTO question_sets(id, lineage_id, lesson_id, title, kind, skill, passing_score, is_published, order_index, shuffle_questions)
+		VALUES($1, $1, $2, 'Practice 1', 'practice', 'reading', 80, true, 0, false)`, set1ID, lesson1ID)
+	exec(`INSERT INTO questions(id, question_set_id, question_type, skill, prompt_text, stimulus_text, points, order_index)
+		VALUES($1, $2, 'multiple_choice', 'reading', 'Pilih arti', 'あ', 1, 0)`, q1ID, set1ID)
+	exec(`INSERT INTO question_options(id, question_id, label, is_correct, order_index)
+		VALUES($1, $2, 'a', true, 0), ($3, $2, 'i', false, 1)`, opt1Correct, q1ID, opt1Wrong)
+
+	// Create module 2 depending on module 1, with a practice set on lesson 2.
+	module2ID := uuid.New()
+	lesson2ID := uuid.New()
+	set2ID := uuid.New()
+	q2ID := uuid.New()
+	opt2Correct := uuid.New()
+	exec(`INSERT INTO modules(id, course_id, slug, title, order_index, is_entry, is_published)
+		VALUES($1, $2, 'module-2', 'Module 2', 1, false, true)`, module2ID, courseID)
+	exec(`INSERT INTO module_prerequisites(module_id, required_module_id) VALUES($1, $2)`, module2ID, module1ID)
+	exec(`INSERT INTO lessons(id, module_id, slug, title, order_index, is_entry, is_published, content)
+		VALUES($1, $2, 'lesson-2', 'Lesson 2', 0, true, true, '{}')`, lesson2ID, module2ID)
+	exec(`INSERT INTO question_sets(id, lineage_id, lesson_id, title, kind, skill, passing_score, is_published, order_index, shuffle_questions)
+		VALUES($1, $1, $2, 'Practice 2', 'practice', 'reading', 80, true, 0, false)`, set2ID, lesson2ID)
+	exec(`INSERT INTO questions(id, question_set_id, question_type, skill, prompt_text, stimulus_text, points, order_index)
+		VALUES($1, $2, 'multiple_choice', 'reading', 'Pilih arti', 'い', 1, 0)`, q2ID, set2ID)
+	exec(`INSERT INTO question_options(id, question_id, label, is_correct, order_index)
+		VALUES($1, $2, 'i', true, 0)`, opt2Correct, q2ID)
+
+	// 1. StartAttempt on practice set in module 2 is blocked while module 1 prerequisite is incomplete.
+	if _, err := repo.StartAttempt(ctx, set2ID, user); !errors.Is(err, utils.ErrLessonPrerequisiteNotCompleted) {
+		t.Fatalf("expected ErrLessonPrerequisiteNotCompleted when module prerequisite incomplete, got %v", err)
+	}
+
+	// 2. Failing practice attempt on module 1 sets both lesson and module status to in_progress.
+	failAttempt, err := repo.StartAttempt(ctx, set1ID, user)
+	if err != nil {
+		t.Fatalf("StartAttempt(set1 fail) error = %v", err)
+	}
+	failRes, err := repo.SubmitAttempt(ctx, set1ID, failAttempt.ID, user, SubmitAttemptRequest{
+		Answers: []SubmitAnswerRequest{{QuestionID: q1ID, SelectedOptionID: &opt1Wrong}},
+	})
+	if err != nil {
+		t.Fatalf("SubmitAttempt(set1 fail) error = %v", err)
+	}
+	if failRes.LessonStatus != "in_progress" || failRes.ModuleStatus != "in_progress" {
+		t.Fatalf("expected lesson & module in_progress on failed attempt, got lesson=%q module=%q", failRes.LessonStatus, failRes.ModuleStatus)
+	}
+
+	// 3. Passing practice attempt on module 1 completes lesson 1 and auto-completes module 1 (no final exam).
+	passAttempt, err := repo.StartAttempt(ctx, set1ID, user)
+	if err != nil {
+		t.Fatalf("StartAttempt(set1 pass) error = %v", err)
+	}
+	passRes, err := repo.SubmitAttempt(ctx, set1ID, passAttempt.ID, user, SubmitAttemptRequest{
+		Answers: []SubmitAnswerRequest{{QuestionID: q1ID, SelectedOptionID: &opt1Correct}},
+	})
+	if err != nil {
+		t.Fatalf("SubmitAttempt(set1 pass) error = %v", err)
+	}
+	if passRes.LessonStatus != "completed" || passRes.ModuleStatus != "completed" {
+		t.Fatalf("expected lesson & module completed on passing attempt, got lesson=%q module=%q", passRes.LessonStatus, passRes.ModuleStatus)
+	}
+
+	// 4. Now StartAttempt on module 2's practice set succeeds, and if module 2 has a final_exam, passing practice keeps module 2 in_progress.
+	exam2ID := uuid.New()
+	exec(`INSERT INTO question_sets(id, lineage_id, module_id, title, kind, skill, passing_score, is_published, order_index)
+		VALUES($1, $1, $2, 'Final Exam 2', 'final_exam', 'reading', 80, true, 1)`, exam2ID, module2ID)
+
+	m2Attempt, err := repo.StartAttempt(ctx, set2ID, user)
+	if err != nil {
+		t.Fatalf("StartAttempt(set2) after module 1 completion error = %v", err)
+	}
+	m2Res, err := repo.SubmitAttempt(ctx, set2ID, m2Attempt.ID, user, SubmitAttemptRequest{
+		Answers: []SubmitAnswerRequest{{QuestionID: q2ID, SelectedOptionID: &opt2Correct}},
+	})
+	if err != nil {
+		t.Fatalf("SubmitAttempt(set2) error = %v", err)
+	}
+	if m2Res.LessonStatus != "completed" || m2Res.ModuleStatus != "in_progress" {
+		t.Fatalf("expected lesson2 completed and module2 in_progress (final_exam exists), got lesson=%q module=%q", m2Res.LessonStatus, m2Res.ModuleStatus)
+	}
 }

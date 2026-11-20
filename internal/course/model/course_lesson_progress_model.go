@@ -22,11 +22,13 @@ func (r UpsertLessonProgressRequest) Validate() error {
 }
 
 type LessonProgress struct {
-	UserID      uuid.UUID  `json:"user_id"`
-	LessonID    uuid.UUID  `json:"lesson_id"`
-	Status      Status     `json:"status"`
-	CompletedAt *time.Time `json:"completed_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	UserID       uuid.UUID  `json:"user_id"`
+	LessonID     uuid.UUID  `json:"lesson_id"`
+	ModuleID     uuid.UUID  `json:"module_id"`
+	Status       Status     `json:"status"`
+	ModuleStatus Status     `json:"module_status"`
+	CompletedAt  *time.Time `json:"completed_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 type LessonProgressResponse struct {

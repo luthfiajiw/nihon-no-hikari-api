@@ -302,15 +302,26 @@ func (r *dbRepository) StartAttempt(ctx context.Context, questionSetID, userID u
 	}
 
 	const prerequisiteQuery = `
-		SELECT NOT EXISTS (
-			SELECT 1
-			FROM lesson_prerequisites lp
-			LEFT JOIN user_lesson_progress progress
-				ON progress.lesson_id = lp.required_lesson_id
-				AND progress.user_id = $2
-			WHERE lp.lesson_id = $1
-				AND COALESCE(progress.status::text, '') <> 'completed'
-		)
+		SELECT
+			NOT EXISTS (
+				SELECT 1
+				FROM lesson_prerequisites lp
+				LEFT JOIN user_lesson_progress progress
+					ON progress.lesson_id = lp.required_lesson_id
+					AND progress.user_id = $2
+				WHERE lp.lesson_id = $1
+					AND COALESCE(progress.status::text, '') <> 'completed'
+			)
+			AND NOT EXISTS (
+				SELECT 1
+				FROM lessons ls
+				JOIN module_prerequisites mp ON mp.module_id = ls.module_id
+				LEFT JOIN user_module_progress progress
+					ON progress.module_id = mp.required_module_id
+					AND progress.user_id = $2
+				WHERE ls.id = $1
+					AND COALESCE(progress.status::text, '') <> 'completed'
+			)
 	`
 	var prerequisitesCompleted bool
 	if set.Kind == QuestionSetKindPractice {
@@ -656,9 +667,10 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	const attemptQuery = `
-		SELECT a.status, a.started_at, qs.lesson_id, qs.module_id, qs.kind, qs.passing_score, qs.time_limit_seconds
+		SELECT a.status, a.started_at, qs.lesson_id, COALESCE(qs.module_id, ls.module_id), qs.kind, qs.passing_score, qs.time_limit_seconds
 		FROM attempts a
 		JOIN question_sets qs ON qs.id = a.question_set_id
+		LEFT JOIN lessons ls ON ls.id = qs.lesson_id
 		WHERE a.id = $1
 			AND a.user_id = $2
 			AND qs.id = $3
@@ -901,6 +913,55 @@ func (r *dbRepository) SubmitAttempt(ctx context.Context, questionSetID, attempt
 	`
 		if err := tx.QueryRow(ctx, progressQuery, userID, lessonID, desiredStatus).Scan(&lessonStatus); err != nil {
 			return nil, err
+		}
+
+		if moduleID != nil {
+			const moduleSyncCheckQuery = `
+				SELECT
+					NOT EXISTS (
+						SELECT 1
+						FROM lessons ls
+						LEFT JOIN user_lesson_progress ulp
+							ON ulp.lesson_id = ls.id
+							AND ulp.user_id = $2
+						WHERE ls.module_id = $1
+							AND ls.is_published = true
+							AND COALESCE(ulp.status::text, '') <> 'completed'
+					)
+					AND NOT EXISTS (
+						SELECT 1
+						FROM question_sets qs
+						WHERE qs.module_id = $1
+							AND qs.kind = 'final_exam'
+							AND qs.is_published = true
+							AND qs.archived_at IS NULL
+					)
+			`
+			var moduleCompleted bool
+			if err := tx.QueryRow(ctx, moduleSyncCheckQuery, *moduleID, userID).Scan(&moduleCompleted); err != nil {
+				return nil, err
+			}
+			desiredModuleStatus := "in_progress"
+			if moduleCompleted {
+				desiredModuleStatus = "completed"
+			}
+			const moduleProgressQuery = `
+				INSERT INTO user_module_progress AS p (user_id, module_id, status, unlocked_at, completed_at, updated_at)
+				VALUES ($1, $2, $3::progress_status, now(), CASE WHEN $3::progress_status = 'completed' THEN now() END, now())
+				ON CONFLICT (user_id, module_id) DO UPDATE SET
+					status = CASE WHEN p.status = 'completed' THEN p.status ELSE EXCLUDED.status END,
+					unlocked_at = COALESCE(p.unlocked_at, now()),
+					completed_at = CASE
+						WHEN p.status = 'completed' THEN p.completed_at
+						WHEN EXCLUDED.status = 'completed' THEN COALESCE(p.completed_at, now())
+						ELSE NULL
+					END,
+					updated_at = now()
+				RETURNING status::text
+			`
+			if err := tx.QueryRow(ctx, moduleProgressQuery, userID, *moduleID, desiredModuleStatus).Scan(&moduleStatus); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		const modulePassedQuery = `SELECT NOT EXISTS(

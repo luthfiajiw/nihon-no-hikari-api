@@ -39,6 +39,34 @@ func (r *dbRepository) UseTx(tx pgx.Tx) Repository {
 	return &dbRepository{q: tx}
 }
 
+func (r *dbRepository) allModuleLessonsCompleted(ctx context.Context, moduleID, userID uuid.UUID) (bool, error) {
+	const query = `
+		SELECT NOT EXISTS (
+			SELECT 1
+			FROM lessons ls
+			LEFT JOIN user_lesson_progress ulp
+				ON ulp.lesson_id = ls.id
+				AND ulp.user_id = $2
+			WHERE ls.module_id = $1
+				AND ls.is_published = true
+				AND COALESCE(ulp.status::text, '') <> 'completed'
+		)
+	`
+	var completed bool
+	if err := r.q.QueryRow(ctx, query, moduleID, userID).Scan(&completed); err != nil {
+		return false, err
+	}
+	return completed, nil
+}
+
+func (r *dbRepository) moduleHasActiveExam(ctx context.Context, moduleID uuid.UUID) (bool, error) {
+	var hasExam bool
+	if err := r.q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM question_sets WHERE module_id=$1 AND kind='final_exam' AND is_published = true AND archived_at IS NULL)`, moduleID).Scan(&hasExam); err != nil {
+		return false, err
+	}
+	return hasExam, nil
+}
+
 func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userID uuid.UUID, req model.UpsertLessonProgressRequest) (*model.LessonProgress, error) {
 	if req.Status != nil && *req.Status == model.StatusCompleted {
 		var hasQuiz bool
@@ -50,15 +78,26 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userI
 		}
 	}
 	const prerequisiteQuery = `
-		SELECT NOT EXISTS (
-			SELECT 1
-			FROM lesson_prerequisites lp
-			LEFT JOIN user_lesson_progress prerequisite_progress
-				ON prerequisite_progress.lesson_id = lp.required_lesson_id
-				AND prerequisite_progress.user_id = $2
-			WHERE lp.lesson_id = ls.id
-				AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
-		)
+		SELECT
+			ls.module_id,
+			NOT EXISTS (
+				SELECT 1
+				FROM module_prerequisites mp
+				LEFT JOIN user_module_progress prerequisite_progress
+					ON prerequisite_progress.module_id = mp.required_module_id
+					AND prerequisite_progress.user_id = $2
+				WHERE mp.module_id = ls.module_id
+					AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
+			),
+			NOT EXISTS (
+				SELECT 1
+				FROM lesson_prerequisites lp
+				LEFT JOIN user_lesson_progress prerequisite_progress
+					ON prerequisite_progress.lesson_id = lp.required_lesson_id
+					AND prerequisite_progress.user_id = $2
+				WHERE lp.lesson_id = ls.id
+					AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
+			)
 		FROM lessons ls
 		JOIN modules m ON m.id = ls.module_id
 		JOIN courses c ON c.id = m.course_id
@@ -68,14 +107,18 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userI
 			AND c.is_published = true
 	`
 
-	var prerequisitesCompleted bool
-	if err := r.q.QueryRow(ctx, prerequisiteQuery, lessonID, userID).Scan(&prerequisitesCompleted); err != nil {
+	var moduleID uuid.UUID
+	var modulePrerequisitesCompleted, lessonPrerequisitesCompleted bool
+	if err := r.q.QueryRow(ctx, prerequisiteQuery, lessonID, userID).Scan(&moduleID, &modulePrerequisitesCompleted, &lessonPrerequisitesCompleted); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, utils.ErrLessonNotFound
 		}
 		return nil, err
 	}
-	if !prerequisitesCompleted {
+	if !modulePrerequisitesCompleted {
+		return nil, utils.ErrModulePrerequisiteNotCompleted
+	}
+	if !lessonPrerequisitesCompleted {
 		return nil, utils.ErrLessonPrerequisiteNotCompleted
 	}
 
@@ -125,13 +168,49 @@ func (r *dbRepository) UpsertLessonProgress(ctx context.Context, lessonID, userI
 		return nil, err
 	}
 
+	allLessonsCompleted, err := r.allModuleLessonsCompleted(ctx, moduleID, userID)
+	if err != nil {
+		return nil, err
+	}
+	desiredModuleStatus := model.StatusInProgress
+	if allLessonsCompleted {
+		hasExam, err := r.moduleHasActiveExam(ctx, moduleID)
+		if err != nil {
+			return nil, err
+		}
+		if !hasExam {
+			desiredModuleStatus = model.StatusCompleted
+		}
+	}
+
+	const moduleProgressQuery = `
+		INSERT INTO user_module_progress AS p (user_id, module_id, status, unlocked_at, completed_at, updated_at)
+		VALUES ($1, $2, $3::progress_status, now(), CASE WHEN $3::progress_status = 'completed' THEN now() END, now())
+		ON CONFLICT (user_id, module_id) DO UPDATE SET
+			status = CASE WHEN p.status = 'completed' THEN p.status ELSE EXCLUDED.status END,
+			unlocked_at = COALESCE(p.unlocked_at, now()),
+			completed_at = CASE
+				WHEN p.status = 'completed' THEN p.completed_at
+				WHEN EXCLUDED.status = 'completed' THEN COALESCE(p.completed_at, now())
+				ELSE NULL
+			END,
+			updated_at = now()
+		RETURNING status
+	`
+	var moduleStatus model.Status
+	if err := r.q.QueryRow(ctx, moduleProgressQuery, userID, moduleID, desiredModuleStatus).Scan(&moduleStatus); err != nil {
+		return nil, err
+	}
+
+	progress.ModuleID = moduleID
+	progress.ModuleStatus = moduleStatus
 	return &progress, nil
 }
 
 func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, moduleID, userID uuid.UUID, req model.UpsertModuleProgressRequest) (*model.ModuleProgress, error) {
 	if (req.Status != nil && *req.Status == model.StatusCompleted) || req.BestScore != nil {
-		var hasExam bool
-		if err := r.q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM question_sets WHERE module_id=$1 AND kind='final_exam' AND is_published AND archived_at IS NULL)`, moduleID).Scan(&hasExam); err != nil {
+		hasExam, err := r.moduleHasActiveExam(ctx, moduleID)
+		if err != nil {
 			return nil, err
 		}
 		if hasExam {
@@ -166,6 +245,16 @@ func (r *dbRepository) UpsertModuleProgress(ctx context.Context, courseID, modul
 		}
 		if !prerequisitesCompleted {
 			return nil, utils.ErrModulePrerequisiteNotCompleted
+		}
+
+		if *req.Status == model.StatusCompleted {
+			allLessonsCompleted, err := r.allModuleLessonsCompleted(ctx, moduleID, userID)
+			if err != nil {
+				return nil, err
+			}
+			if !allLessonsCompleted {
+				return nil, utils.ErrModuleLessonsNotCompleted
+			}
 		}
 	}
 
@@ -361,6 +450,14 @@ func (r *dbRepository) ListLessons(ctx context.Context, courseID, userID uuid.UU
 			ls.title,
 			CASE
 				WHEN EXISTS (
+					SELECT 1
+					FROM module_prerequisites mp
+					LEFT JOIN user_module_progress prerequisite_progress
+						ON prerequisite_progress.module_id = mp.required_module_id
+						AND prerequisite_progress.user_id = $2
+					WHERE mp.module_id = ls.module_id
+						AND COALESCE(prerequisite_progress.status::text, '') <> 'completed'
+				) OR EXISTS (
 					SELECT 1
 					FROM lesson_prerequisites lp
 					LEFT JOIN user_lesson_progress prerequisite_progress

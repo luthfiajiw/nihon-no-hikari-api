@@ -88,6 +88,8 @@ func (h *Handler) upsertLessonProgress(c fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		case errors.Is(err, utils.ErrLessonNotFound):
 			return c.Status(fiber.StatusNotFound).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrModulePrerequisiteNotCompleted):
+			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		case errors.Is(err, utils.ErrLessonPrerequisiteNotCompleted):
 			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		case errors.Is(err, utils.ErrLessonCompletionRequiresQuiz):
@@ -148,6 +150,8 @@ func (h *Handler) upsertModuleProgress(c fiber.Ctx) error {
 		case errors.Is(err, utils.ErrModulePrerequisiteNotCompleted):
 			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		case errors.Is(err, utils.ErrModuleCompletionRequiresExam):
+			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
+		case errors.Is(err, utils.ErrModuleLessonsNotCompleted):
 			return c.Status(fiber.StatusConflict).JSON(utils.ErrorRes{Success: false, Error: err.Error()})
 		default:
 			return c.Status(fiber.StatusInternalServerError).JSON(utils.ErrorRes{Success: false, Error: err.Error()})

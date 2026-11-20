@@ -9,12 +9,13 @@ import (
 
 type serviceRepositoryStub struct {
 	ContentRepository
-	detail             *QuestionSetDetail
-	startAttemptResult *Attempt
-	abandonErr         error
-	abandonCalled      bool
-	abandonedAttemptID uuid.UUID
-	abandonedUserID    uuid.UUID
+	detail              *QuestionSetDetail
+	startAttemptResult  *Attempt
+	submitAttemptResult *AttemptResult
+	abandonErr          error
+	abandonCalled       bool
+	abandonedAttemptID  uuid.UUID
+	abandonedUserID     uuid.UUID
 }
 
 func (r *serviceRepositoryStub) ListQuestionSets(context.Context, uuid.UUID, uuid.UUID) ([]QuestionSet, error) {
@@ -41,7 +42,7 @@ func (r *serviceRepositoryStub) AbandonAttempt(_ context.Context, _, attemptID, 
 }
 
 func (r *serviceRepositoryStub) SubmitAttempt(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, SubmitAttemptRequest) (*AttemptResult, error) {
-	return nil, nil
+	return r.submitAttemptResult, nil
 }
 
 func TestGetQuestionSetDetail(t *testing.T) {
@@ -136,5 +137,31 @@ func TestStartAttempt(t *testing.T) {
 	}
 	if resp.Data.Questions[0].Options[0].IsCorrect == nil || !*resp.Data.Questions[0].Options[0].IsCorrect {
 		t.Fatalf("StartAttempt() expected is_correct true, got %#v", resp.Data.Questions[0].Options[0].IsCorrect)
+	}
+}
+
+func TestSubmitAttemptPropagatesModuleStatus(t *testing.T) {
+	attemptID := uuid.New()
+	questionID := uuid.New()
+	optionID := uuid.New()
+	repo := &serviceRepositoryStub{
+		submitAttemptResult: &AttemptResult{
+			AttemptID:    attemptID,
+			Score:        100,
+			IsPassed:     true,
+			LessonStatus: "completed",
+			ModuleStatus: "completed",
+		},
+	}
+	svc := NewService(nil, repo)
+
+	resp, err := svc.SubmitAttempt(context.Background(), uuid.New(), attemptID, uuid.New(), SubmitAttemptRequest{
+		Answers: []SubmitAnswerRequest{{QuestionID: questionID, SelectedOptionID: &optionID}},
+	})
+	if err != nil {
+		t.Fatalf("SubmitAttempt() error = %v", err)
+	}
+	if resp.Data.LessonStatus != "completed" || resp.Data.ModuleStatus != "completed" {
+		t.Fatalf("expected lesson and module completed, got %+v", resp.Data)
 	}
 }
